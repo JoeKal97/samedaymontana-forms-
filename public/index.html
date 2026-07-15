@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Same Day Montana — Form Filler</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --navy:    #0C1F3D;
+  --navy2:   #163060;
+  --gold:    #C8952A;
+  --gold-lt: #E8B84B;
+  --bg:      #F4F2ED;
+  --surface: #FFFFFF;
+  --border:  #D6D1C7;
+  --muted:   #7A7468;
+  --text:    #1A1610;
+  --green:   #1E6E3C;
+  --green-bg:#E6F4EC;
+  --red:     #8B2020;
+  --red-bg:  #FAE8E8;
+  --amber-bg:#FBF3E2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+header{background:var(--navy);height:58px;display:flex;align-items:center;padding:0 28px;gap:14px;border-bottom:3px solid var(--gold);position:sticky;top:0;z-index:50}
+.logo-badge{width:32px;height:32px;background:var(--gold);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;color:var(--navy)}
+.logo-name{color:#fff;font-weight:600;font-size:15px}
+.logo-name span{color:var(--gold-lt)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.form-tabs{display:flex;gap:2px}
+.tab{padding:6px 14px;border-radius:4px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.6);transition:.15s}
+.tab:hover{background:rgba(255,255,255,.14);color:#fff}
+.tab.active{background:var(--gold);color:var(--navy);font-weight:600}
+.tab.disabled{opacity:.3;cursor:not-allowed}
+.header-sub{font-family:'IBM Plex Mono',monospace;font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.5px;text-transform:uppercase}
+
+/* ── Layout ── */
+.shell{display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:calc(100vh - 58px)}
+
+/* ── Left panel — input ── */
+.left-panel{padding:28px 28px 40px;border-right:1px solid var(--border)}
+.panel-title{font-size:13px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.panel-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+
+.drop-zone{border:1.5px dashed var(--border);border-radius:8px;background:var(--surface);padding:18px;margin-bottom:14px;transition:.2s;cursor:pointer}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--gold);background:var(--amber-bg)}
+.drop-icon{font-size:28px;margin-bottom:8px;opacity:.4}
+.drop-label{font-size:13px;color:var(--muted);margin-bottom:8px}
+.drop-label strong{color:var(--text)}
+.file-badge{display:inline-flex;align-items:center;gap:6px;background:var(--green-bg);color:var(--green);border:1px solid #b3d9c4;border-radius:4px;padding:4px 10px;font-size:12px;font-weight:500;margin-top:6px}
+
+.or-row{display:flex;align-items:center;gap:10px;margin:12px 0;color:var(--muted);font-size:11px}
+.or-row::before,.or-row::after{content:'';flex:1;height:1px;background:var(--border)}
+
+textarea{width:100%;min-height:120px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;color:var(--text);background:var(--surface);resize:vertical;line-height:1.55;transition:.15s}
+textarea::placeholder{color:var(--muted)}
+textarea:focus{outline:none;border-color:var(--navy)}
+
+.extract-btn{width:100%;margin-top:12px;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.extract-btn:hover{background:var(--navy2)}
+.extract-btn:disabled{opacity:.5;cursor:not-allowed}
+
+.status-bar{margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;display:none;line-height:1.4}
+.status-bar.visible{display:block}
+.status-bar.loading{background:var(--amber-bg);color:#7a5a10;border:1px solid #e8d08a}
+.status-bar.ok{background:var(--green-bg);color:var(--green);border:1px solid #b3d9c4}
+.status-bar.err{background:var(--red-bg);color:var(--red);border:1px solid #f0b8b8}
+
+/* ── Right panel — review + fill ── */
+.right-panel{padding:28px 28px 40px;overflow-y:auto}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:300px;text-align:center;gap:8px;color:var(--muted)}
+.empty-icon{font-size:36px;opacity:.25;margin-bottom:4px}
+.empty-title{font-size:14px;font-weight:500;color:var(--text);opacity:.5}
+.empty-sub{font-size:12px}
+
+/* Fields */
+.section-divider{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:10px;grid-column:span 2}
+.fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field.full{grid-column:span 2}
+.field label{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.field input,.field select{border:1px solid var(--border);border-radius:4px;padding:6px 9px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--text);background:var(--surface);transition:.15s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--navy)}
+.field input.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.3px}
+.field input.filled{background:#f0f7ff;border-color:#b8d4f0}
+
+/* Fill button */
+.fill-btn{width:100%;margin-top:16px;padding:12px;background:var(--gold);color:var(--navy);border:none;border-radius:6px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.fill-btn:hover{background:var(--gold-lt)}
+.fill-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.dl-row{display:none;margin-top:12px;padding:12px 14px;background:var(--green-bg);border:1px solid #b3d9c4;border-radius:6px;align-items:center;gap:12px}
+.dl-row.visible{display:flex}
+.dl-icon{font-size:22px;color:var(--green);flex-shrink:0}
+.dl-link{font-size:13px;font-weight:600;color:var(--green);text-decoration:none;display:block}
+.dl-link:hover{text-decoration:underline}
+.dl-hint{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* Spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .7s linear infinite}
+
+input[type=file]{display:none}
+
+@media(max-width:720px){
+  .shell{grid-template-columns:1fr}
+  .left-panel{border-right:none;border-bottom:1px solid var(--border)}
+  .header-right{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">SDM</div>
+  <div class="logo-name">Same Day <span>Montana</span></div>
+  <div class="header-right">
+    <div class="form-tabs" id="form-tabs">
+      <button class="tab active" data-form="MV1">MV1</button>
+      <button class="tab disabled" disabled title="Coming soon">MV2</button>
+      <button class="tab disabled" disabled title="Coming soon">MV25</button>
+    </div>
+    <div class="header-sub">Registered Agent · Form Filler</div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <!-- LEFT: Input -->
+  <div class="left-panel">
+    <div class="panel-title">Dump in what you have</div>
+    <div class="panel-sub">Paste text, upload a title scan, or both. AI extracts the fields.</div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-in').click()"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <div class="drop-icon">📄</div>
+      <div class="drop-label"><strong>Drop a title scan here</strong> — image or PDF</div>
+      <div id="file-badge" style="display:none" class="file-badge">
+        <span>📎</span><span id="file-name-display"></span>
+        <span style="cursor:pointer;opacity:.6;margin-left:4px" onclick="event.stopPropagation();clearFile()">✕</span>
+      </div>
+      <input type="file" id="file-in" accept="image/*,.pdf" onchange="handleFileSelect(this)">
+    </div>
+
+    <div class="or-row">or paste info below</div>
+
+    <textarea id="raw-text"
+      placeholder="Paste anything — LLC name, VIN, email from client, address, year/make/model, notes... AI will figure out the fields."></textarea>
+
+    <button class="extract-btn" id="extract-btn" onclick="extractFields()">
+      ✦ Extract fields with AI
+    </button>
+    <div class="status-bar" id="status-bar"></div>
+  </div>
+
+  <!-- RIGHT: Review + Fill -->
+  <div class="right-panel" id="right-panel">
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">⬅</div>
+      <div class="empty-title">Nothing extracted yet</div>
+      <div class="empty-sub">Paste some info or upload a title scan, then hit Extract.</div>
+    </div>
+
+    <div id="review-section" style="display:none">
+      <div class="panel-title" style="margin-bottom:4px">Review &amp; correct</div>
+      <div class="panel-sub" style="margin-bottom:14px">AI-filled fields are highlighted. Fix anything before downloading.</div>
+      <div class="fields-grid" id="fields-grid"></div>
+      <button class="fill-btn" id="fill-btn" onclick="fillPDF()">
+        ⬇ Fill MV1 &amp; Download PDF
+      </button>
+      <div class="dl-row" id="dl-row">
+        <div class="dl-icon">✅</div>
+        <div>
+          <a class="dl-link" id="dl-link" href="#" download>Download filled MV1 →</a>
+          <div class="dl-hint">Print and sign — signature lines left blank for wet signature</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+let uploadedFile = null;
+let currentForm = 'MV1';
+let lastFilledUrl = null;
+
+const FIELD_DEFS = [
+  {s:'Applicant'},
+  {k:'applicant_name',     l:'Applicant legal name',       full:true},
+  {k:'applicant_id',       l:'DL / FEIN / Corp ID',        mono:true},
+  {k:'applicant_jurisdiction', l:'Jurisdiction'},
+  {s:'Mailing Address'},
+  {k:'mailing_address',    l:'Street address',             full:true},
+  {k:'mailing_city',       l:'City'},
+  {k:'mailing_state',      l:'State'},
+  {k:'mailing_zip',        l:'Zip'},
+  {k:'mailing_county',     l:'County'},
+  {s:'Contact'},
+  {k:'phone',              l:'Phone'},
+  {k:'email',              l:'Email',                      full:true},
+  {s:'Vehicle'},
+  {k:'year',               l:'Year'},
+  {k:'make',               l:'Make'},
+  {k:'model',              l:'Model',                      full:true},
+  {k:'vin',                l:'VIN',                        full:true, mono:true},
+  {k:'color',              l:'Color'},
+  {k:'fuel_type',          l:'Fuel type',  type:'select', opts:['','Gas','Diesel','Electric','Hybrid','Other']},
+  {k:'style',              l:'Style',      type:'select', opts:['','Pickup','SUV','Sedan','Coupe','Van','Truck','Motorhome','Trailer','Other']},
+  {k:'msrp',               l:'MSRP when new ($)',          mono:true},
+  {s:'Sale / Odometer'},
+  {k:'sale_date',          l:'Sale date (mm/dd/yyyy)',     mono:true},
+  {k:'sold_new',           l:'Condition', type:'select',  opts:['Used','New']},
+  {k:'seller_name',        l:'Seller name'},
+  {k:'seller_address',     l:'Seller address',             full:true},
+  {k:'odometer_reading',   l:'Odometer reading (miles)',   mono:true},
+  {k:'odometer_date',      l:'Odometer read date',         mono:true},
+  {k:'dealer_license',     l:'Dealer license #',           mono:true},
+  {s:'Acknowledgement'},
+  {k:'business_name',      l:'Full business name (entity)', full:true},
+  {k:'applicant_signing_date', l:'Signing date (mm/dd/yyyy)', mono:true},
+];
+
+// ── File handling ──────────────────────────────────────────
+function handleFileSelect(input) {
+  if (input.files[0]) setFile(input.files[0]);
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+}
+function setFile(f) {
+  uploadedFile = f;
+  document.getElementById('file-name-display').textContent = f.name;
+  document.getElementById('file-badge').style.display = 'inline-flex';
+}
+function clearFile() {
+  uploadedFile = null;
+  document.getElementById('file-name-display').textContent = '';
+  document.getElementById('file-badge').style.display = 'none';
+  document.getElementById('file-in').value = '';
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ── Status ─────────────────────────────────────────────────
+function setStatus(msg, type='loading') {
+  const el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.className = 'status-bar visible ' + type;
+}
+function clearStatus() {
+  document.getElementById('status-bar').className = 'status-bar';
+}
+
+// ── Extract ────────────────────────────────────────────────
+async function extractFields() {
+  const text = document.getElementById('raw-text').value.trim();
+  if (!text && !uploadedFile) {
+    setStatus('Paste some text or upload a file first.', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('extract-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Extracting...';
+  setStatus('Sending to AI...', 'loading');
+
+  try {
+    const body = { text };
+    if (uploadedFile) {
+      body.imageBase64 = await fileToBase64(uploadedFile);
+      body.imageMediaType = uploadedFile.type || 'image/jpeg';
+    }
+
+    const resp = await fetch(`${API_BASE}/api/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Extraction failed');
+
+    renderReviewPanel(json.data);
+    setStatus('Fields extracted — review and correct below, then fill.', 'ok');
+
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✦ Extract fields with AI';
+  }
+}
+
+// ── Render review panel ────────────────────────────────────
+function renderReviewPanel(data) {
+  const grid = document.getElementById('fields-grid');
+  grid.innerHTML = '';
+
+  FIELD_DEFS.forEach(f => {
+    if (f.s) {
+      const div = document.createElement('div');
+      div.className = 'section-divider';
+      div.textContent = f.s;
+      grid.appendChild(div);
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'field' + (f.full ? ' full' : '');
+    const lbl = document.createElement('label');
+    lbl.textContent = f.l;
+    wrap.appendChild(lbl);
+
+    let inp;
+    if (f.type === 'select') {
+      inp = document.createElement('select');
+      (f.opts || []).forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o; opt.textContent = o || '— select —';
+        const dv = f.k === 'sold_new'
+          ? (data[f.k] === true || data[f.k] === 'true' ? 'New' : 'Used')
+          : (data[f.k] || '');
+        if (dv === o) opt.selected = true;
+        inp.appendChild(opt);
+      });
+    } else {
+      inp = document.createElement('input');
+      inp.type = 'text';
+      const val = data[f.k] || '';
+      inp.value = val;
+      if (val) inp.classList.add('filled');
+      if (f.mono) inp.classList.add('mono');
+    }
+    inp.id = 'fld_' + f.k;
+    wrap.appendChild(inp);
+    grid.appendChild(wrap);
+  });
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('review-section').style.display = 'block';
+  document.getElementById('dl-row').className = 'dl-row';
+}
+
+function getVal(key) {
+  const el = document.getElementById('fld_' + key);
+  return el ? el.value.trim() : '';
+}
+
+// ── Fill PDF via server ────────────────────────────────────
+async function fillPDF() {
+  const btn = document.getElementById('fill-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Filling PDF...';
+  setStatus('Filling PDF on server...', 'loading');
+
+  const payload = { form: currentForm };
+  FIELD_DEFS.forEach(f => {
+    if (!f.k) return;
+    if (f.k === 'sold_new') {
+      payload[f.k] = getVal(f.k) === 'New';
+    } else {
+      payload[f.k] = getVal(f.k);
+    }
+  });
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/fill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || 'Fill failed');
+    }
+
+    const blob = await resp.blob();
+    if (lastFilledUrl) URL.revokeObjectURL(lastFilledUrl);
+    lastFilledUrl = URL.createObjectURL(blob);
+
+    const safeName = (payload.applicant_name || 'client').replace(/[^a-z0-9]/gi,'_').substring(0,30);
+    const link = document.getElementById('dl-link');
+    link.href = lastFilledUrl;
+    link.download = `MV1_${safeName}.pdf`;
+    link.textContent = `Download MV1_${safeName}.pdf →`;
+    document.getElementById('dl-row').className = 'dl-row visible';
+    setStatus('PDF ready — click download above.', 'ok');
+
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '⬇ Fill MV1 &amp; Download PDF';
+  }
+}
+
+// ── Form tab switching ─────────────────────────────────────
+document.getElementById('form-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab || tab.disabled || tab.classList.contains('disabled')) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentForm = tab.dataset.form;
+});
+</script>
+</body>
+</html>
