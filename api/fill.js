@@ -90,6 +90,18 @@ module.exports = async function handler(req, res) {
     setText("Applicant Jurisdiction", d.applicant_jurisdiction || "MT");
     setText("Mail State", d.mailing_state || "MT");
 
+    setText("Mailing Address",     "110 Ironwood Place");
+    setText("Mailing City",        "Missoula");
+    setText("Mail State",          "MT");
+    setText("Mail Zip",            "59803");
+    setText("Residential Address", "110 Ironwood Place");
+    setText("Residential City",    "Missoula");
+    setText("Residential State",   "MT");
+    setText("Residential Zip",     "59803");
+    setText("Email Address",       "joekalafat@gmail.com");
+    setText("Phone Number",        "406-540-2941");
+    setText("Applicants Printed Name", "Joe Kalafat - Agent");
+
     // Checkboxes — vehicle condition
     const soldNew = d.sold_new === true || d.sold_new === "true" || d.sold_new === "New";
     setCheck("Vehicle sold New - check", soldNew);
@@ -97,8 +109,9 @@ module.exports = async function handler(req, res) {
 
     // Lien
     const hasLien = d.has_lien === true || d.has_lien === "true";
-    setCheck("Security Lien - check No", !hasLien);
-    setCheck("Security Lien - check Yes", hasLien);
+    // Section 3 always left blank
+    setCheck("Security Lien - check No", false);
+    setCheck("Security Lien - check Yes", false);
 
     // Leased
     const leased = d.vehicle_leased === true || d.vehicle_leased === "true";
