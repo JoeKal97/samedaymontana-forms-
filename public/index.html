@@ -123,6 +123,7 @@ input[type=file]{display:none}
     <div class="form-tabs" id="form-tabs">
       <button class="tab active" data-form="MV1">MV1</button>
       <button class="tab disabled" disabled title="Coming soon">MV2</button>
+      <button class="tab" data-form="MV24">MV24</button>
       <button class="tab disabled" disabled title="Coming soon">MV25</button>
     </div>
     <div class="header-sub">Registered Agent · Form Filler</div>
@@ -228,6 +229,9 @@ const FIELD_DEFS = [
   {s:'Acknowledgement'},
   {k:'business_name',      l:'Full business name (entity)', full:true},
   {k:'applicant_signing_date', l:'Signing date (mm/dd/yyyy)', mono:true},
+  {k:'sale_price',    l:'Sale price ($)',              mono:true},
+  {k:'seller_id',     l:'Seller DL / FEIN / Corp ID',  mono:true},
+  {k:'license_plate', l:'License plate #',              mono:true},
 ];
 
 // ── File handling ──────────────────────────────────────────
@@ -372,6 +376,7 @@ async function fillPDF() {
   btn.innerHTML = '<span class="spin">⟳</span> Filling PDF...';
   setStatus('Filling PDF on server...', 'loading');
 
+  const fillEndpoint = currentForm === 'MV24' ? '/api/fill-mv24' : '/api/fill';
   const payload = { form: currentForm };
   FIELD_DEFS.forEach(f => {
     if (!f.k) return;
@@ -383,7 +388,7 @@ async function fillPDF() {
   });
 
   try {
-    const resp = await fetch(`${API_BASE}/api/fill`, {
+    const resp = await fetch(`${API_BASE}${fillEndpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
