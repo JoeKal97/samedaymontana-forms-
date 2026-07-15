@@ -107,11 +107,20 @@ module.exports = async function handler(req, res) {
     setCheck("Vehicle sold New - check", soldNew);
     setCheck("Vehicle sold Used - check", !soldNew);
 
-    // Lien
-    const hasLien = d.has_lien === true || d.has_lien === "true";
-    // Section 3 always left blank
+    // Section 3 — only fill if lienholder name was actually provided
+    const hasLien = !!(d.lienholder_name && d.lienholder_name.trim());
     setCheck("Security Lien - check No", false);
     setCheck("Security Lien - check Yes", false);
+
+    if (hasLien) {
+      setCheck("Security Lien - check Yes", true);
+      setText("Name of Security Party or Lienholder", d.lienholder_name);
+      setText("Secured Party Lienholder DL/FEIN/Tribal ID/Corp ID/ELT", d.lienholder_id);
+      setText("Mailing Address of Secured Party or Lienholder", d.lienholder_address);
+      setText("Secured Party Lienholder City", d.lienholder_city);
+      setText("Secured Party Lienholder State", d.lienholder_state);
+      setText("Secured Party Lienholder Zip", d.lienholder_zip);
+    }
 
     // Leased
     const leased = d.vehicle_leased === true || d.vehicle_leased === "true";
@@ -132,16 +141,6 @@ module.exports = async function handler(req, res) {
     // E-notice — default opt out
     setCheck("e-notice opt in",  false);
     setCheck("e-notice opt out", true);
-
-    // Lienholder fields (if applicable)
-    if (hasLien) {
-      setText("Name of Security Party or Lienholder", d.lienholder_name);
-      setText("Secured Party Lienholder DL/FEIN/Tribal ID/Corp ID/ELT", d.lienholder_id);
-      setText("Mailing Address of Secured Party or Lienholder", d.lienholder_address);
-      setText("Secured Party Lienholder City", d.lienholder_city);
-      setText("Secured Party Lienholder State", d.lienholder_state);
-      setText("Secured Party Lienholder Zip", d.lienholder_zip);
-    }
 
     form.flatten();
     const filledBytes = await pdfDoc.save();
