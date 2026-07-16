@@ -148,13 +148,20 @@ input[type=file]{display:none}
         <span>📎</span><span id="file-name-display"></span>
         <span style="cursor:pointer;opacity:.6;margin-left:4px" onclick="event.stopPropagation();clearFile()">✕</span>
       </div>
-      <input type="file" id="file-in" accept="image/*,.pdf" onchange="handleFileSelect(this)">
+      <input type="file" id="file-in" accept="image/*,.pdf" multiple onchange="handleFileSelect(this)">
     </div>
 
     <div class="or-row">or paste info below</div>
 
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+      💡 <strong>Quick entry:</strong> Just type or paste one line —
+      <span style="font-family:monospace;font-size:10px;">LLC name / Corp ID / Year Make Model / VIN / Color / Miles / Seller name</span>
+    </div>
+
     <textarea id="raw-text"
-      placeholder="Paste anything — LLC name, VIN, email from client, address, year/make/model, notes... AI will figure out the fields."></textarea>
+      placeholder="Paste anything — title scan text, email, POA, or one quick line like:
+Big Sky LLC / 84-1234567 / 2021 Chevy Silverado / 1GCUYDED5MZ123456 / White / 31500 miles / John Smith seller
+AI will figure out the fields from whatever format you give it."></textarea>
 
     <button class="extract-btn" id="extract-btn" onclick="extractFields()">
       ✦ Extract fields with AI
@@ -177,6 +184,9 @@ input[type=file]{display:none}
       <button class="fill-btn" id="fill-btn" onclick="fillPDF()">
         ⬇ Fill Document &amp; Download PDF
       </button>
+      <button class="fill-btn" id="fill-both-btn" onclick="fillBoth()" style="margin-top:8px;background:var(--navy);color:#fff;">
+        ⬇ Fill MV1 + MV24 &amp; Download Both
+      </button>
       <div class="dl-row" id="dl-row">
         <div class="dl-icon">✅</div>
         <div>
@@ -191,7 +201,7 @@ input[type=file]{display:none}
 
 <script>
 const API_BASE = window.location.origin;
-let uploadedFile = null;
+let uploadedFiles = [];
 let currentForm = 'MV1';
 let lastFilledUrl = null;
 
@@ -236,21 +246,27 @@ const FIELD_DEFS = [
 
 // ── File handling ──────────────────────────────────────────
 function handleFileSelect(input) {
-  if (input.files[0]) setFile(input.files[0]);
+  if (input.files.length) {
+    uploadedFiles = Array.from(input.files);
+    document.getElementById('file-name-display').textContent =
+      uploadedFiles.length === 1 ? uploadedFiles[0].name : `${uploadedFiles.length} files selected`;
+    document.getElementById('file-badge').style.display = 'inline-flex';
+  }
 }
+
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('drop-zone').classList.remove('drag-over');
-  const f = e.dataTransfer.files[0];
-  if (f) setFile(f);
+  if (e.dataTransfer.files.length) {
+    uploadedFiles = Array.from(e.dataTransfer.files);
+    document.getElementById('file-name-display').textContent =
+      uploadedFiles.length === 1 ? uploadedFiles[0].name : `${uploadedFiles.length} files selected`;
+    document.getElementById('file-badge').style.display = 'inline-flex';
+  }
 }
-function setFile(f) {
-  uploadedFile = f;
-  document.getElementById('file-name-display').textContent = f.name;
-  document.getElementById('file-badge').style.display = 'inline-flex';
-}
+
 function clearFile() {
-  uploadedFile = null;
+  uploadedFiles = [];
   document.getElementById('file-name-display').textContent = '';
   document.getElementById('file-badge').style.display = 'none';
   document.getElementById('file-in').value = '';
@@ -278,7 +294,7 @@ function clearStatus() {
 // ── Extract ────────────────────────────────────────────────
 async function extractFields() {
   const text = document.getElementById('raw-text').value.trim();
-  if (!text && !uploadedFile) {
+  if (!text && !uploadedFiles.length) {
     setStatus('Paste some text or upload a file first.', 'err');
     return;
   }
@@ -290,9 +306,12 @@ async function extractFields() {
 
   try {
     const body = { text };
-    if (uploadedFile) {
-      body.imageBase64 = await fileToBase64(uploadedFile);
-      body.imageMediaType = uploadedFile.type || 'image/jpeg';
+    if (uploadedFiles.length) {
+      body.files = await Promise.all(uploadedFiles.map(async f => ({
+        base64: await fileToBase64(f),
+        mediaType: f.type || 'image/jpeg',
+        name: f.name
+      })));
     }
 
     const resp = await fetch(`${API_BASE}/api/extract`, {
@@ -416,6 +435,49 @@ async function fillPDF() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '⬇ Fill Document &amp; Download PDF';
+  }
+}
+
+// ── Fill both forms at once ────────────────────────────────
+async function fillBoth() {
+  const btn = document.getElementById('fill-both-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Filling both forms...';
+  setStatus('Generating MV1 + MV24...', 'loading');
+
+  const payload = { form: 'MV1' };
+  FIELD_DEFS.forEach(f => {
+    if (!f.k) return;
+    payload[f.k] = f.k === 'sold_new' ? getVal(f.k) === 'New' : getVal(f.k);
+  });
+
+  try {
+    const [mv1Resp, mv24Resp] = await Promise.all([
+      fetch(`${API_BASE}/api/fill`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...payload, form:'MV1'}) }),
+      fetch(`${API_BASE}/api/fill-mv24`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    ]);
+
+    if (!mv1Resp.ok || !mv24Resp.ok) throw new Error('One or both fills failed');
+
+    const [mv1Blob, mv24Blob] = await Promise.all([mv1Resp.blob(), mv24Resp.blob()]);
+    const safeName = (payload.applicant_name || 'client').replace(/[^a-z0-9]/gi,'_').substring(0,30);
+
+    // Trigger both downloads
+    for (const [blob, name] of [[mv1Blob, `MV1_${safeName}.pdf`], [mv24Blob, `MV24_${safeName}.pdf`]]) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    setStatus('Both PDFs downloaded — MV1 and MV24 ready to print.', 'ok');
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '⬇ Fill MV1 + MV24 &amp; Download Both';
   }
 }
 

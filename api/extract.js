@@ -50,6 +50,10 @@ Rules:
 - mailing_state defaults to "MT" if not specified
 - applicant_jurisdiction defaults to "MT"
 - odometer_digits is 5 or 6
+- When multiple documents are provided, combine information from all of them. A title scan provides vehicle info, a POA provides the owner/applicant name and ID. Use all sources together.
+- Out-of-state titles vary by format. California titles list VIN prominently at top. Texas titles have a horizontal layout. Look for any 17-character alphanumeric string for VIN, 4-digit year, and known manufacturer names for Make.
+- If the same field appears in multiple documents and values conflict, prefer the most official source (title > POA > email).
+- Quick single-line entry format: fields separated by slashes or commas in any order. A 17-char alphanumeric is always the VIN. A number followed by "miles" is the odometer. A 4-digit number 1980-2030 is the year. XX-XXXXXXX format is a FEIN/Corp ID.
 - Only return the JSON — nothing else`;
 
 async function handler(req, res) {
@@ -61,15 +65,26 @@ async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  const { text, imageBase64, imageMediaType } = req.body || {};
+  const { text, files, imageBase64, imageMediaType } = req.body || {};
 
-  if (!text && !imageBase64) {
+  if (!text && !imageBase64 && !(files && files.length)) {
     return res.status(400).json({ error: "Provide text or an image" });
   }
 
   const userContent = [];
 
-  if (imageBase64) {
+  if (files && files.length) {
+    for (const file of files) {
+      const isPDF = file.mediaType === "application/pdf";
+      userContent.push(isPDF ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: file.base64 },
+      } : {
+        type: "image",
+        source: { type: "base64", media_type: file.mediaType || "image/jpeg", data: file.base64 },
+      });
+    }
+  } else if (imageBase64) {
     const isPDF = imageMediaType === "application/pdf";
     if (isPDF) {
       userContent.push({
