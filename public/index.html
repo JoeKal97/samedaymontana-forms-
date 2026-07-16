@@ -693,17 +693,25 @@ async function fillBoth() {
 }
 
 // ── RiDE DMV Airtable submit ───────────────────────────────
-// Set this to the Airtable form/webhook URL for RiDE DMV submissions.
+// Set this to the shared Airtable form URL for RiDE DMV submissions,
+// e.g. 'https://airtable.com/appXXXXXXXXXXXXXX/shrYYYYYYYYYYYYYY'
 const RIDE_AIRTABLE_URL = '';
+const RIDE_PROCESSING_TYPE = 'Title Transfer';
 
 function submitToRide() {
   if (!RIDE_AIRTABLE_URL) {
-    setStatus('RiDE DMV Airtable submission is not configured yet — set RIDE_AIRTABLE_URL in index.html to the Airtable form/webhook URL.', 'err');
+    setStatus('RiDE DMV Airtable submission is not configured yet — set RIDE_AIRTABLE_URL in index.html to the shared Airtable form URL.', 'err');
     return;
   }
-  const params = new URLSearchParams();
-  FIELD_DEFS.forEach(f => { if (f.k) { const v = getVal(f.k); if (v) params.set(f.k, v); } });
-  window.open(RIDE_AIRTABLE_URL + (RIDE_AIRTABLE_URL.includes('?') ? '&' : '?') + params.toString(), '_blank');
+  // Airtable form prefill — param names must match the Airtable field names exactly
+  const p = new URLSearchParams();
+  p.set('prefill_Processing Type', RIDE_PROCESSING_TYPE);
+  p.set('prefill_Year',       getVal('year'));
+  p.set('prefill_Make',       getVal('make'));
+  p.set('prefill_Model',      getVal('model'));
+  p.set('prefill_VIN',        getVal('vin'));
+  p.set('prefill_Owner Name', getVal('applicant_name'));
+  window.open(RIDE_AIRTABLE_URL + (RIDE_AIRTABLE_URL.includes('?') ? '&' : '?') + p.toString(), '_blank');
   setStatus('Opened RiDE DMV Airtable submission in a new tab.', 'ok');
 }
 
