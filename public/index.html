@@ -143,6 +143,7 @@ input[type=file]{display:none}
       <button class="tab active" data-form="MV1">MV1</button>
       <button class="tab disabled" disabled title="Coming soon">MV2</button>
       <button class="tab" data-form="MV24">MV24</button>
+      <button class="tab" data-form="MV90A">MV90A</button>
       <button class="tab disabled" disabled title="Coming soon">MV25</button>
     </div>
     <div class="header-sub">Registered Agent · Form Filler</div>
@@ -235,6 +236,9 @@ AI will figure out the fields from whatever format you give it."></textarea>
       </button>
       <button class="fill-btn" id="fill-both-btn" onclick="fillBoth()" style="margin-top:8px;background:var(--navy);color:#fff;">
         ⬇ Fill MV1 + MV24 &amp; Download Both
+      </button>
+      <button class="fill-btn" id="ride-submit-btn" onclick="submitToRide()" style="margin-top:8px;background:var(--green);color:#fff;">
+        ⬆ Submit to RiDE DMV Airtable
       </button>
       <div class="dl-row" id="dl-row">
         <div class="dl-icon">✅</div>
@@ -601,7 +605,8 @@ async function fillPDF() {
   btn.innerHTML = '<span class="spin">⟳</span> Filling PDF...';
   setStatus('Filling PDF on server...', 'loading');
 
-  const fillEndpoint = currentForm === 'MV24' ? '/api/fill-mv24' : '/api/fill';
+  const fillEndpoint = currentForm === 'MV24' ? '/api/fill-mv24' :
+                       currentForm === 'MV90A' ? '/api/fill-mv90a' : '/api/fill';
   const payload = { form: currentForm };
   FIELD_DEFS.forEach(f => {
     if (!f.k) return;
@@ -631,8 +636,8 @@ async function fillPDF() {
     const safeName = (payload.applicant_name || 'client').replace(/[^a-z0-9]/gi,'_').substring(0,30);
     const link = document.getElementById('dl-link');
     link.href = lastFilledUrl;
-    link.download = `MV1_${safeName}.pdf`;
-    link.textContent = `Download MV1_${safeName}.pdf →`;
+    link.download = `${currentForm}_${safeName}.pdf`;
+    link.textContent = `Download ${currentForm}_${safeName}.pdf →`;
     document.getElementById('dl-row').className = 'dl-row visible';
     setStatus('PDF ready — click download above.', 'ok');
 
@@ -685,6 +690,21 @@ async function fillBoth() {
     btn.disabled = false;
     btn.innerHTML = '⬇ Fill MV1 + MV24 &amp; Download Both';
   }
+}
+
+// ── RiDE DMV Airtable submit ───────────────────────────────
+// Set this to the Airtable form/webhook URL for RiDE DMV submissions.
+const RIDE_AIRTABLE_URL = '';
+
+function submitToRide() {
+  if (!RIDE_AIRTABLE_URL) {
+    setStatus('RiDE DMV Airtable submission is not configured yet — set RIDE_AIRTABLE_URL in index.html to the Airtable form/webhook URL.', 'err');
+    return;
+  }
+  const params = new URLSearchParams();
+  FIELD_DEFS.forEach(f => { if (f.k) { const v = getVal(f.k); if (v) params.set(f.k, v); } });
+  window.open(RIDE_AIRTABLE_URL + (RIDE_AIRTABLE_URL.includes('?') ? '&' : '?') + params.toString(), '_blank');
+  setStatus('Opened RiDE DMV Airtable submission in a new tab.', 'ok');
 }
 
 // ── Form tab switching ─────────────────────────────────────
