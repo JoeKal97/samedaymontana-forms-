@@ -1,4 +1,4 @@
-const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
+const { PDFDocument, rgb, StandardFonts, PDFName, PDFBool } = require("pdf-lib");
 const fs = require("fs");
 const path = require("path");
 
@@ -56,8 +56,11 @@ module.exports = async function handler(req, res) {
       size: 16, font, color: rgb(0.05, 0.1, 0.5)
     });
 
-    form.flatten();
-    const filledBytes = await pdfDoc.save();
+    // NeedAppearances: let Acrobat regenerate field appearances instead of
+    // flattening — pdf-lib's generated appearance streams corrupt page 1 in Acrobat
+    // (same fix applied to MV1 in fill.js).
+    form.acroForm.dict.set(PDFName.of("NeedAppearances"), PDFBool.True);
+    const filledBytes = await pdfDoc.save({ updateFieldAppearances: false });
     const safeName = PURCHASER_NAME.replace(/[^a-z0-9]/gi,"_").substring(0,30);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="MV24_${safeName}.pdf"`);
