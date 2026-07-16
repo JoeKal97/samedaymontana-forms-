@@ -271,7 +271,8 @@ let lastFilledUrl = null;
 let driveToken = null;
 let driveFileIds = [];   // [{id, name}] — queued Browse Drive selections, fetched server-side
 let driveShareUrl = null; // queued Drive Link — fetched server-side
-let folderStack = [{id:'root', name:'My Drive'}];
+const RECEIVED_FOLDER_ID = '1wZamzwFjL5Tu6wUojdOB075A6yQ3I0iM';
+let folderStack = [{id: RECEIVED_FOLDER_ID, name: 'Received'}];
 let selectedDriveIds = new Set();
 let driveNameById = {};
 
@@ -302,8 +303,9 @@ window.addEventListener('message', e => {
     driveToken = d.access_token;
     document.getElementById('drive-connect-row').style.display = 'none';
     document.getElementById('drive-browser').style.display = 'block';
-    folderStack = [{id:'root', name:'My Drive'}];
-    loadFolder('root');
+    // Open directly to 5 Star / Received where client title scans land
+    folderStack = [{id: RECEIVED_FOLDER_ID, name: 'Received'}];
+    loadFolder(RECEIVED_FOLDER_ID);
     setStatus('Google Drive connected.', 'ok');
   } else if (d.type === 'DRIVE_AUTH_ERROR') {
     setStatus('Drive auth error: ' + d.error, 'err');
@@ -544,6 +546,8 @@ async function extractFields() {
     if (!resp.ok) throw new Error(json.error || 'Extraction failed');
 
     renderReviewPanel(json.data);
+    // Clear Drive selections so the next pick starts clean (no accumulation)
+    clearDriveFiles();
     setStatus('Fields extracted — review and correct below, then fill.', 'ok');
 
   } catch(e) {
