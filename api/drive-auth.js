@@ -2,7 +2,7 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   const { code, error } = req.query;
   if (error) {
-    return res.status(400).send(`<script>window.opener.postMessage({ type: 'DRIVE_AUTH_ERROR', error: '${error}' }, '*');window.close();</script>`);
+    return res.status(400).send(`<script>window.opener.postMessage({ type: 'DRIVE_AUTH_ERROR', error: '${error}' }, 'https://samedaymontana-forms.vercel.app');window.close();</script>`);
   }
   if (!code) return res.status(400).send("Missing code");
   try {
@@ -20,8 +20,8 @@ module.exports = async function handler(req, res) {
     });
     const tokens = await tokenResp.json();
     if (tokens.error) throw new Error(tokens.error_description || tokens.error);
-    return res.status(200).send(`<!DOCTYPE html><html><body><script>window.opener.postMessage({ type: 'DRIVE_AUTH_SUCCESS', access_token: '${tokens.access_token}', expires_in: ${tokens.expires_in || 3600} }, '*');window.close();</script></body></html>`);
+    return res.status(200).send(`<!DOCTYPE html><html><body><script>window.opener.postMessage({ type: 'DRIVE_AUTH_SUCCESS', access_token: '${tokens.access_token}', expires_in: ${tokens.expires_in || 3600} }, 'https://samedaymontana-forms.vercel.app');window.close();</script></body></html>`);
   } catch (err) {
-    return res.status(500).send(`<script>window.opener.postMessage({ type: 'DRIVE_AUTH_ERROR', error: '${err.message}' }, '*');window.close();</script>`);
+    return res.status(500).send(`<script>window.opener.postMessage({ type: 'DRIVE_AUTH_ERROR', error: '${err.message}' }, 'https://samedaymontana-forms.vercel.app');window.close();</script>`);
   }
 };
