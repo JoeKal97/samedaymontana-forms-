@@ -7,6 +7,13 @@ module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // Only allow requests from our own frontend
+  const origin = req.headers.origin || req.headers.referer || '';
+  const allowed = ['samedaymontana-forms.vercel.app', 'localhost'];
+  if (!allowed.some(h => origin.includes(h))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   const token = process.env.AIRTABLE_TOKEN;
   if (!token) return res.status(500).json({ error: "AIRTABLE_TOKEN not configured" });
 
