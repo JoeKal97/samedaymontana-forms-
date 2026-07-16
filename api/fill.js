@@ -1,4 +1,4 @@
-const { PDFDocument } = require("pdf-lib");
+const { PDFDocument, PDFName, PDFBool } = require("pdf-lib");
 const fs = require("fs");
 const path = require("path");
 
@@ -142,8 +142,10 @@ module.exports = async function handler(req, res) {
     setCheck("e-notice opt in",  false);
     setCheck("e-notice opt out", true);
 
-    form.flatten();
-    const filledBytes = await pdfDoc.save();
+    // NeedAppearances: let Acrobat regenerate field appearances instead of
+    // flattening — pdf-lib's generated appearance streams corrupt page 1 in Acrobat
+    form.acroForm.dict.set(PDFName.of("NeedAppearances"), PDFBool.True);
+    const filledBytes = await pdfDoc.save({ updateFieldAppearances: false });
 
     const safeName = (d.applicant_name || "client")
       .replace(/[^a-z0-9]/gi, "_")
