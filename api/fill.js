@@ -22,17 +22,12 @@ const TEXT_FIELDS = {
   fuel_type:             "Fuel Type",
   style:                 "Style",
   msrp:                  "Retail price when new",
-  sale_date:             "Vehicle sold date",
-  seller_name:           "Sellers Printed Name",
-  seller_address:        "Sellers Address",
-  odometer_reading:      "Odometer reading",
-  odometer_date:         "Date odometer read",
-  dealer_signing_date:   "Signing Odometer Date",
-  dealer_license:        "Dealer License Number",
   applicant_printed:     "Applicants Printed Name",
-  business_name:         "Business Name",
   applicant_signing_date:"Applicant signing date",
 };
+// Section 4 (Odometer Statement of Sale) is always left blank — signed by hand.
+// Its fields (sold new/used, sale date, seller name/address, odometer reading/
+// date/digits, dealer signature date, dealer license) are intentionally unmapped.
 
 module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") {
@@ -81,7 +76,6 @@ module.exports = async function handler(req, res) {
     // Fill all text fields
     Object.entries(TEXT_FIELDS).forEach(([key, fieldId]) => {
       const val = key === "applicant_printed" ? (d.applicant_name || d.business_name) :
-                  key === "dealer_signing_date" ? (d.dealer_signing_date || d.sale_date) :
                   d[key];
       setText(fieldId, val);
     });
@@ -102,10 +96,8 @@ module.exports = async function handler(req, res) {
     setText("Phone Number",        "406-540-2941");
     setText("Applicants Printed Name", "Joe Kalafat - Agent");
 
-    // Checkboxes — vehicle condition
-    const soldNew = d.sold_new === true || d.sold_new === "true" || d.sold_new === "New";
-    setCheck("Vehicle sold New - check", soldNew);
-    setCheck("Vehicle sold Used - check", !soldNew);
+    // Business Name always mirrors the applicant name
+    setText("Business Name", d.applicant_name);
 
     // Section 3 — only fill if lienholder name was actually provided
     const hasLien = !!(d.lienholder_name && d.lienholder_name.trim());
@@ -126,11 +118,6 @@ module.exports = async function handler(req, res) {
     const leased = d.vehicle_leased === true || d.vehicle_leased === "true";
     setCheck("Yes vehicle leased", leased);
     setCheck("No vehicle not leased", !leased);
-
-    // Odometer digits
-    const odoDigits = parseInt(d.odometer_digits) || 6;
-    setCheck("Five digit odometer - check", odoDigits === 5);
-    setCheck("Six digit odometer - check", odoDigits === 6);
 
     // Phone type
     const phoneType = (d.phone_type || "cell").toLowerCase();
