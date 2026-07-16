@@ -71,8 +71,22 @@ function extractFileId(url) {
   return null;
 }
 async function fetchPublicFile(fileId) {
-  const resp = await fetch(`https://drive.google.com/uc?export=download&id=${fileId}`, { headers: { "User-Agent": "SameDayMontana/1.0" }, redirect: "follow" });
-  return processResponse(resp, fileId);
+  // Try newer usercontent URL first (handles large files without confirmation page)
+  const urls = [
+    `https://drive.usercontent.google.com/download?id=${fileId}&export=download&authuser=0`,
+    `https://drive.google.com/uc?export=download&id=${fileId}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 SameDayMontana/1.0" },
+        redirect: "follow",
+      });
+      if (resp.ok) return await processResponse(resp, fileId);
+    } catch(_) {}
+  }
+  throw new Error("Could not fetch file from Drive — make sure sharing is set to 'Anyone with the link can view'");
 }
 async function fetchAuthedFile(fileId, authHeader) {
   const metaResp = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`, { headers: { Authorization: authHeader } });
@@ -89,6 +103,7 @@ async function fetchAuthedFile(fileId, authHeader) {
 }
 async function processResponse(resp, fileId) {
   const contentType = resp.headers.get("content-type") || "application/pdf";
+
   if (contentType.includes("text/html")) {
     const html = await resp.text();
     const m = html.match(/href="(\/uc\?export=download[^"]+confirm=[^"]+)"/);
@@ -97,10 +112,25 @@ async function processResponse(resp, fileId) {
       const buffer = await confirmResp.arrayBuffer();
       return { base64: Buffer.from(buffer).toString("base64"), mediaType: "application/pdf", name: `file_${fileId}.pdf` };
     }
-    throw new Error("Got HTML instead of PDF — make sure sharing is set to 'Anyone with the link can view'");
+    // Try Google's newer confirm token format
+    const tokenMatch = html.match(/name="uuid" value="([^"]+)"/);
+    if (tokenMatch) {
+      const confirmUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t&uuid=${tokenMatch[1]}`;
+      const confirmResp = await fetch(confirmUrl, { redirect: "follow" });
+      const buffer = await confirmResp.arrayBuffer();
+      return { base64: Buffer.from(buffer).toString("base64"), mediaType: "application/pdf", name: `file_${fileId}.pdf` };
+    }
+    throw new Error("Could not download file — make sure sharing is set to 'Anyone with the link can view'");
   }
+
   const buffer = await resp.arrayBuffer();
-  return { base64: Buffer.from(buffer).toString("base64"), mediaType: contentType.split(";")[0] || "application/pdf", name: `file_${fileId}.pdf` };
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  // Force PDF for anything that isn't a known image type
+  const knownImage = ["image/jpeg","image/png","image/gif","image/webp"].includes(contentType.split(";")[0]);
+  const mediaType = knownImage ? contentType.split(";")[0] : "application/pdf";
+
+  return { base64, mediaType, name: `file_${fileId}.pdf` };
 }
 
 const SYSTEM_PROMPT = `You are a Montana vehicle registration assistant for Same Day Montana, a registered agent service.
