@@ -175,7 +175,7 @@ input[type=file]{display:none}
       <div class="panel-sub" style="margin-bottom:14px">AI-filled fields are highlighted. Fix anything before downloading.</div>
       <div class="fields-grid" id="fields-grid"></div>
       <button class="fill-btn" id="fill-btn" onclick="fillPDF()">
-        ⬇ Fill MV1 &amp; Download PDF
+        ⬇ Fill Document &amp; Download PDF
       </button>
       <div class="dl-row" id="dl-row">
         <div class="dl-icon">✅</div>
@@ -415,7 +415,7 @@ async function fillPDF() {
     setStatus('Error: ' + e.message, 'err');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '⬇ Fill MV1 &amp; Download PDF';
+    btn.innerHTML = '⬇ Fill Document &amp; Download PDF';
   }
 }
 
