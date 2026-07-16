@@ -272,7 +272,7 @@ let driveToken = null;
 let driveFileIds = [];   // [{id, name}] — queued Browse Drive selections, fetched server-side
 let driveShareUrl = null; // queued Drive Link — fetched server-side
 const RECEIVED_FOLDER_ID = '1wZamzwFjL5Tu6wUojdOB075A6yQ3I0iM';
-let folderStack = [{id: RECEIVED_FOLDER_ID, name: 'Received'}];
+let folderStack = [{id:'root', name:'My Drive'}, {id: RECEIVED_FOLDER_ID, name: 'Received'}];
 let selectedDriveIds = new Set();
 let driveNameById = {};
 
@@ -303,8 +303,9 @@ window.addEventListener('message', e => {
     driveToken = d.access_token;
     document.getElementById('drive-connect-row').style.display = 'none';
     document.getElementById('drive-browser').style.display = 'block';
-    // Open directly to 5 Star / Received where client title scans land
-    folderStack = [{id: RECEIVED_FOLDER_ID, name: 'Received'}];
+    // Open directly to 5 Star / Received where client title scans land,
+    // keeping My Drive as the root crumb so the user can navigate up.
+    folderStack = [{id:'root', name:'My Drive'}, {id: RECEIVED_FOLDER_ID, name: 'Received'}];
     loadFolder(RECEIVED_FOLDER_ID);
     setStatus('Google Drive connected.', 'ok');
   } else if (d.type === 'DRIVE_AUTH_ERROR') {
@@ -330,9 +331,27 @@ async function loadFolder(folderId) {
 
 function openFolder(id, name) { folderStack.push({id, name}); loadFolder(id); }
 function upFolder() { if (folderStack.length > 1) folderStack.pop(); loadFolder(folderStack[folderStack.length-1].id); }
+// Jump to a crumb: truncate the stack to that depth and load it
+function jumpToFolder(i) {
+  if (i < 0 || i >= folderStack.length) return;
+  folderStack = folderStack.slice(0, i + 1);
+  loadFolder(folderStack[i].id);
+}
 
 function renderDriveList(files) {
-  document.getElementById('drive-crumbs').textContent = folderStack.map(f => f.name).join(' / ');
+  // Clickable breadcrumb: My Drive › Received › …
+  const crumbs = document.getElementById('drive-crumbs');
+  crumbs.innerHTML = '';
+  folderStack.forEach((f, i) => {
+    if (i > 0) crumbs.appendChild(document.createTextNode(' › '));
+    const seg = document.createElement('span');
+    seg.textContent = f.name;
+    if (i < folderStack.length - 1) {
+      seg.style.cssText = 'cursor:pointer;text-decoration:underline';
+      seg.onclick = () => jumpToFolder(i);
+    }
+    crumbs.appendChild(seg);
+  });
   selectedDriveIds.clear();
   document.getElementById('drive-add-btn').disabled = true;
   const list = document.getElementById('drive-list');
