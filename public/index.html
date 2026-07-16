@@ -107,6 +107,25 @@ textarea:focus{outline:none;border-color:var(--navy)}
 
 input[type=file]{display:none}
 
+/* ── Input mode tabs ── */
+.input-tabs{display:flex;gap:2px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px}
+.itab{flex:1;padding:7px 10px;border:none;border-radius:4px;background:transparent;color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:.15s}
+.itab:hover{color:var(--text)}
+.itab.active{background:var(--navy);color:#fff;font-weight:600}
+.drive-input{width:100%;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:var(--surface)}
+.drive-input:focus{outline:none;border-color:var(--navy)}
+.drive-btn{margin-top:10px;padding:10px 16px;background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:.15s}
+.drive-btn:hover{background:var(--navy2)}
+.drive-btn:disabled{opacity:.5;cursor:not-allowed}
+.drive-list{margin-top:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);max-height:260px;overflow-y:auto}
+.drive-item{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)}
+.drive-item:last-child{border-bottom:none}
+.drive-item:hover{background:var(--amber-bg)}
+.drive-item.selected{background:var(--green-bg)}
+.drive-crumbs{font-size:11px;color:var(--muted);margin-top:10px;font-family:'IBM Plex Mono',monospace}
+.drive-files-row{display:none;margin-bottom:12px;padding:8px 12px;background:var(--green-bg);border:1px solid #b3d9c4;border-radius:6px;font-size:12px;color:var(--green)}
+.drive-files-row.visible{display:block}
+
 @media(max-width:720px){
   .shell{grid-template-columns:1fr}
   .left-panel{border-right:none;border-bottom:1px solid var(--border)}
@@ -135,8 +154,37 @@ input[type=file]{display:none}
   <!-- LEFT: Input -->
   <div class="left-panel">
     <div class="panel-title">Dump in what you have</div>
-    <div class="panel-sub">Paste text, upload a title scan, or both. AI extracts the fields.</div>
+    <div class="panel-sub">Grab documents from Drive, upload scans, or paste text. AI extracts the fields.</div>
 
+    <div class="input-tabs" id="input-tabs">
+      <button class="itab" data-mode="link" onclick="switchInputMode('link')">Drive Link</button>
+      <button class="itab" data-mode="browse" onclick="switchInputMode('browse')">Browse Drive</button>
+      <button class="itab active" data-mode="upload" onclick="switchInputMode('upload')">Upload / Paste</button>
+    </div>
+
+    <div class="drive-files-row" id="drive-files-row"></div>
+
+    <!-- Drive Link mode -->
+    <div id="mode-link" style="display:none">
+      <input class="drive-input" id="drive-url" placeholder='Paste a Google Drive share link — "Anyone with the link can view"'>
+      <button class="drive-btn" id="drive-url-btn" onclick="fetchDriveLink()">Fetch from Drive</button>
+    </div>
+
+    <!-- Browse Drive mode -->
+    <div id="mode-browse" style="display:none">
+      <div id="drive-connect-row">
+        <button class="drive-btn" id="drive-connect-btn" onclick="driveConnect()">🔗 Connect Google Drive</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Read-only access. Browse folders and pick title scans or POAs.</div>
+      </div>
+      <div id="drive-browser" style="display:none">
+        <div class="drive-crumbs" id="drive-crumbs">My Drive</div>
+        <div class="drive-list" id="drive-list"></div>
+        <button class="drive-btn" id="drive-add-btn" onclick="fetchSelectedDriveFiles()" disabled>Add selected files</button>
+      </div>
+    </div>
+
+    <!-- Upload mode -->
+    <div id="mode-upload">
     <!-- Drop zone -->
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-in').click()"
          ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -149,6 +197,7 @@ input[type=file]{display:none}
         <span style="cursor:pointer;opacity:.6;margin-left:4px" onclick="event.stopPropagation();clearFile()">✕</span>
       </div>
       <input type="file" id="file-in" accept="image/*,.pdf" multiple onchange="handleFileSelect(this)">
+    </div>
     </div>
 
     <div class="or-row">or paste info below</div>
@@ -201,9 +250,170 @@ AI will figure out the fields from whatever format you give it."></textarea>
 
 <script>
 const API_BASE = window.location.origin;
+const clientId = '764792119784-emrftn7pb3v53nafrjem9i3gfcv0afjc.apps.googleusercontent.com';
 let uploadedFiles = [];
 let currentForm = 'MV1';
 let lastFilledUrl = null;
+let driveToken = null;
+let driveFiles = [];
+let folderStack = [{id:'root', name:'My Drive'}];
+let selectedDriveIds = new Set();
+
+// ── Input mode tabs ────────────────────────────────────────
+function switchInputMode(mode) {
+  document.querySelectorAll('.itab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('mode-link').style.display   = mode === 'link'   ? 'block' : 'none';
+  document.getElementById('mode-browse').style.display = mode === 'browse' ? 'block' : 'none';
+  document.getElementById('mode-upload').style.display = mode === 'upload' ? 'block' : 'none';
+}
+
+// ── Google Drive ───────────────────────────────────────────
+function driveConnect() {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: window.location.origin + '/api/drive-auth',
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    prompt: 'select_account',
+  });
+  window.open('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString(), 'driveAuth', 'width=480,height=640');
+}
+
+window.addEventListener('message', e => {
+  if (e.origin !== window.location.origin) return;
+  const d = e.data || {};
+  if (d.type === 'DRIVE_AUTH_SUCCESS') {
+    driveToken = d.access_token;
+    document.getElementById('drive-connect-row').style.display = 'none';
+    document.getElementById('drive-browser').style.display = 'block';
+    folderStack = [{id:'root', name:'My Drive'}];
+    loadFolder('root');
+    setStatus('Google Drive connected.', 'ok');
+  } else if (d.type === 'DRIVE_AUTH_ERROR') {
+    setStatus('Drive auth error: ' + d.error, 'err');
+  }
+});
+
+async function loadFolder(folderId) {
+  const list = document.getElementById('drive-list');
+  list.innerHTML = '<div class="drive-item" style="cursor:default">Loading...</div>';
+  try {
+    const resp = await fetch(`${API_BASE}/api/drive-list?folder_id=${encodeURIComponent(folderId)}`, {
+      headers: { Authorization: 'Bearer ' + driveToken }
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Could not list folder');
+    renderDriveList(json.files || []);
+  } catch(e) {
+    setStatus('Drive error: ' + e.message, 'err');
+    list.innerHTML = '';
+  }
+}
+
+function openFolder(id, name) { folderStack.push({id, name}); loadFolder(id); }
+function upFolder() { if (folderStack.length > 1) folderStack.pop(); loadFolder(folderStack[folderStack.length-1].id); }
+
+function renderDriveList(files) {
+  document.getElementById('drive-crumbs').textContent = folderStack.map(f => f.name).join(' / ');
+  selectedDriveIds.clear();
+  document.getElementById('drive-add-btn').disabled = true;
+  const list = document.getElementById('drive-list');
+  list.innerHTML = '';
+  if (folderStack.length > 1) {
+    const up = document.createElement('div');
+    up.className = 'drive-item';
+    up.textContent = '⬆ Up';
+    up.onclick = upFolder;
+    list.appendChild(up);
+  }
+  if (!files.length) {
+    const empty = document.createElement('div');
+    empty.className = 'drive-item';
+    empty.style.cursor = 'default';
+    empty.textContent = 'No PDFs, images, or Docs in this folder';
+    list.appendChild(empty);
+    return;
+  }
+  files.forEach(f => {
+    const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
+    const div = document.createElement('div');
+    div.className = 'drive-item';
+    div.textContent = (isFolder ? '📁 ' : '📄 ') + f.name;
+    div.onclick = () => {
+      if (isFolder) { openFolder(f.id, f.name); return; }
+      if (selectedDriveIds.has(f.id)) { selectedDriveIds.delete(f.id); div.classList.remove('selected'); }
+      else { selectedDriveIds.add(f.id); div.classList.add('selected'); }
+      document.getElementById('drive-add-btn').disabled = selectedDriveIds.size === 0;
+    };
+    list.appendChild(div);
+  });
+}
+
+async function fetchSelectedDriveFiles() {
+  const btn = document.getElementById('drive-add-btn');
+  btn.disabled = true;
+  btn.textContent = 'Fetching...';
+  setStatus('Downloading files from Drive...', 'loading');
+  try {
+    const resp = await fetch(`${API_BASE}/api/drive-fetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + driveToken },
+      body: JSON.stringify({ file_ids: [...selectedDriveIds] })
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Fetch failed');
+    driveFiles.push(...json.files);
+    updateDriveBadge();
+    setStatus(`Added ${json.files.length} file(s) from Drive — hit Extract when ready.`, 'ok');
+    selectedDriveIds.clear();
+    document.querySelectorAll('.drive-item.selected').forEach(d => d.classList.remove('selected'));
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+  } finally {
+    btn.textContent = 'Add selected files';
+    btn.disabled = selectedDriveIds.size === 0;
+  }
+}
+
+async function fetchDriveLink() {
+  const url = document.getElementById('drive-url').value.trim();
+  if (!url) { setStatus('Paste a Drive share link first.', 'err'); return; }
+  const btn = document.getElementById('drive-url-btn');
+  btn.disabled = true;
+  btn.textContent = 'Fetching...';
+  setStatus('Fetching file from Drive...', 'loading');
+  try {
+    const resp = await fetch(`${API_BASE}/api/drive-fetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ share_url: url })
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Fetch failed');
+    driveFiles.push(...json.files);
+    updateDriveBadge();
+    document.getElementById('drive-url').value = '';
+    setStatus(`Added ${json.files.length} file(s) from Drive — hit Extract when ready.`, 'ok');
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fetch from Drive';
+  }
+}
+
+function updateDriveBadge() {
+  const row = document.getElementById('drive-files-row');
+  if (!driveFiles.length) { row.className = 'drive-files-row'; row.innerHTML = ''; return; }
+  row.className = 'drive-files-row visible';
+  row.textContent = `📎 ${driveFiles.length} Drive file(s): ${driveFiles.map(f => f.name).join(', ')} `;
+  const x = document.createElement('span');
+  x.style.cssText = 'cursor:pointer;float:right;opacity:.7';
+  x.textContent = '✕';
+  x.onclick = clearDriveFiles;
+  row.appendChild(x);
+}
+function clearDriveFiles() { driveFiles = []; updateDriveBadge(); }
 
 const FIELD_DEFS = [
   {s:'Applicant'},
@@ -294,8 +504,8 @@ function clearStatus() {
 // ── Extract ────────────────────────────────────────────────
 async function extractFields() {
   const text = document.getElementById('raw-text').value.trim();
-  if (!text && !uploadedFiles.length) {
-    setStatus('Paste some text or upload a file first.', 'err');
+  if (!text && !uploadedFiles.length && !driveFiles.length) {
+    setStatus('Paste some text, upload a file, or grab one from Drive first.', 'err');
     return;
   }
 
@@ -306,13 +516,16 @@ async function extractFields() {
 
   try {
     const body = { text };
+    const fileEntries = [];
     if (uploadedFiles.length) {
-      body.files = await Promise.all(uploadedFiles.map(async f => ({
+      fileEntries.push(...await Promise.all(uploadedFiles.map(async f => ({
         base64: await fileToBase64(f),
         mediaType: f.type || 'image/jpeg',
         name: f.name
-      })));
+      }))));
     }
+    if (driveFiles.length) fileEntries.push(...driveFiles);
+    if (fileEntries.length) body.files = fileEntries;
 
     const resp = await fetch(`${API_BASE}/api/extract`, {
       method: 'POST',
