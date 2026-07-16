@@ -717,10 +717,40 @@ const RIDE_COPY_FIELDS = [
   { label: 'Owner Name',      value: () => getVal('applicant_name') },
 ];
 
-function submitToRide() {
-  window.open(RIDE_AIRTABLE_URL, '_blank');
-  renderRideCopyPanel();
-  setStatus('Airtable opened in a new tab — copy each field across with the buttons below.', 'ok');
+async function submitToRide() {
+  const btn = document.getElementById('ride-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Submitting...';
+  setStatus('Sending to RiDE DMV Airtable...', 'loading');
+
+  const payload = {
+    applicant_name: getVal('applicant_name'),
+    vin:   getVal('vin'),
+    year:  getVal('year'),
+    make:  getVal('make'),
+    model: getVal('model'),
+  };
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/airtable-submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await resp.json();
+    if (resp.ok && json.success) {
+      setStatus('✅ Record created in RiDE DMV — ' + (json.id || ''), 'ok');
+      return;
+    }
+    throw new Error(json.error || 'Submit failed');
+  } catch(e) {
+    window.open(RIDE_AIRTABLE_URL, '_blank');
+    renderRideCopyPanel();
+    setStatus('Auto-submit failed (' + e.message + ') — Airtable opened, copy fields below.', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '⬆ Submit to RiDE DMV Airtable';
+  }
 }
 
 function renderRideCopyPanel() {
