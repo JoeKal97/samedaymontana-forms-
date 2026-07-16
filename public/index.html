@@ -255,9 +255,11 @@ let uploadedFiles = [];
 let currentForm = 'MV1';
 let lastFilledUrl = null;
 let driveToken = null;
-let driveFiles = [];
+let driveFileIds = [];   // [{id, name}] — queued Browse Drive selections, fetched server-side
+let driveShareUrl = null; // queued Drive Link — fetched server-side
 let folderStack = [{id:'root', name:'My Drive'}];
 let selectedDriveIds = new Set();
+let driveNameById = {};
 
 // ── Input mode tabs ────────────────────────────────────────
 function switchInputMode(mode) {
@@ -336,6 +338,7 @@ function renderDriveList(files) {
   }
   files.forEach(f => {
     const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
+    driveNameById[f.id] = f.name;
     const div = document.createElement('div');
     div.className = 'drive-item';
     div.textContent = (isFolder ? '📁 ' : '📄 ') + f.name;
@@ -349,71 +352,47 @@ function renderDriveList(files) {
   });
 }
 
-async function fetchSelectedDriveFiles() {
-  const btn = document.getElementById('drive-add-btn');
-  btn.disabled = true;
-  btn.textContent = 'Fetching...';
-  setStatus('Downloading files from Drive...', 'loading');
-  try {
-    const resp = await fetch(`${API_BASE}/api/drive-fetch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + driveToken },
-      body: JSON.stringify({ file_ids: [...selectedDriveIds] })
-    });
-    const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error || 'Fetch failed');
-    driveFiles.push(...json.files);
-    updateDriveBadge();
-    setStatus(`Added ${json.files.length} file(s) from Drive — hit Extract when ready.`, 'ok');
-    selectedDriveIds.clear();
-    document.querySelectorAll('.drive-item.selected').forEach(d => d.classList.remove('selected'));
-  } catch(e) {
-    setStatus('Error: ' + e.message, 'err');
-  } finally {
-    btn.textContent = 'Add selected files';
-    btn.disabled = selectedDriveIds.size === 0;
-  }
+function fetchSelectedDriveFiles() {
+  // Queue IDs only — the server fetches file content during extraction,
+  // so nothing large ever passes through the browser (4.5MB body cap).
+  [...selectedDriveIds].forEach(id => {
+    if (!driveFileIds.some(f => f.id === id)) driveFileIds.push({ id, name: driveNameById[id] || id });
+  });
+  selectedDriveIds.clear();
+  document.querySelectorAll('.drive-item.selected').forEach(d => d.classList.remove('selected'));
+  document.getElementById('drive-add-btn').disabled = true;
+  updateDriveBadge();
+  setStatus(`${driveFileIds.length} Drive file(s) queued — they'll be fetched server-side when you hit Extract.`, 'ok');
 }
 
-async function fetchDriveLink() {
+function fetchDriveLink() {
   const url = document.getElementById('drive-url').value.trim();
   if (!url) { setStatus('Paste a Drive share link first.', 'err'); return; }
-  const btn = document.getElementById('drive-url-btn');
-  btn.disabled = true;
-  btn.textContent = 'Fetching...';
-  setStatus('Fetching file from Drive...', 'loading');
-  try {
-    const resp = await fetch(`${API_BASE}/api/drive-fetch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ share_url: url })
-    });
-    const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error || 'Fetch failed');
-    driveFiles.push(...json.files);
-    updateDriveBadge();
-    document.getElementById('drive-url').value = '';
-    setStatus(`Added ${json.files.length} file(s) from Drive — hit Extract when ready.`, 'ok');
-  } catch(e) {
-    setStatus('Error: ' + e.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Fetch from Drive';
+  if (!/drive\.google\.com|docs\.google\.com/.test(url)) {
+    setStatus('That does not look like a Google Drive link.', 'err');
+    return;
   }
+  driveShareUrl = url;
+  document.getElementById('drive-url').value = '';
+  updateDriveBadge();
+  setStatus('Drive link queued — it will be fetched server-side when you hit Extract.', 'ok');
 }
 
 function updateDriveBadge() {
   const row = document.getElementById('drive-files-row');
-  if (!driveFiles.length) { row.className = 'drive-files-row'; row.innerHTML = ''; return; }
+  const parts = [];
+  if (driveShareUrl) parts.push('1 shared link');
+  if (driveFileIds.length) parts.push(driveFileIds.map(f => f.name).join(', '));
+  if (!parts.length) { row.className = 'drive-files-row'; row.innerHTML = ''; return; }
   row.className = 'drive-files-row visible';
-  row.textContent = `📎 ${driveFiles.length} Drive file(s): ${driveFiles.map(f => f.name).join(', ')} `;
+  row.textContent = `📎 Drive queue: ${parts.join(' + ')} `;
   const x = document.createElement('span');
   x.style.cssText = 'cursor:pointer;float:right;opacity:.7';
   x.textContent = '✕';
   x.onclick = clearDriveFiles;
   row.appendChild(x);
 }
-function clearDriveFiles() { driveFiles = []; updateDriveBadge(); }
+function clearDriveFiles() { driveFileIds = []; driveShareUrl = null; updateDriveBadge(); }
 
 const FIELD_DEFS = [
   {s:'Applicant'},
@@ -504,7 +483,7 @@ function clearStatus() {
 // ── Extract ────────────────────────────────────────────────
 async function extractFields() {
   const text = document.getElementById('raw-text').value.trim();
-  if (!text && !uploadedFiles.length && !driveFiles.length) {
+  if (!text && !uploadedFiles.length && !driveFileIds.length && !driveShareUrl) {
     setStatus('Paste some text, upload a file, or grab one from Drive first.', 'err');
     return;
   }
@@ -515,23 +494,37 @@ async function extractFields() {
   setStatus('Sending to AI...', 'loading');
 
   try {
-    const body = { text };
-    const fileEntries = [];
-    if (uploadedFiles.length) {
-      fileEntries.push(...await Promise.all(uploadedFiles.map(async f => ({
-        base64: await fileToBase64(f),
-        mediaType: f.type || 'image/jpeg',
-        name: f.name
-      }))));
+    let resp;
+    if (driveFileIds.length || driveShareUrl) {
+      // Drive files: server fetches and extracts in one call — bypasses the
+      // browser's 4.5MB request body cap entirely.
+      resp = await fetch(`${API_BASE}/api/drive-extract`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(driveToken ? { 'Authorization': `Bearer ${driveToken}` } : {}),
+        },
+        body: JSON.stringify({
+          file_ids: driveFileIds.map(f => f.id),
+          share_url: driveShareUrl || undefined,
+          text,
+        }),
+      });
+    } else {
+      const body = { text };
+      if (uploadedFiles.length) {
+        body.files = await Promise.all(uploadedFiles.map(async f => ({
+          base64: await fileToBase64(f),
+          mediaType: f.type || 'image/jpeg',
+          name: f.name
+        })));
+      }
+      resp = await fetch(`${API_BASE}/api/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
     }
-    if (driveFiles.length) fileEntries.push(...driveFiles);
-    if (fileEntries.length) body.files = fileEntries;
-
-    const resp = await fetch(`${API_BASE}/api/extract`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
 
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || 'Extraction failed');
