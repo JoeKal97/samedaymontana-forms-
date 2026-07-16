@@ -126,6 +126,15 @@ input[type=file]{display:none}
 .drive-files-row{display:none;margin-bottom:12px;padding:8px 12px;background:var(--green-bg);border:1px solid #b3d9c4;border-radius:6px;font-size:12px;color:var(--green)}
 .drive-files-row.visible{display:block}
 
+/* ── RiDE copy panel ── */
+.copy-panel{margin-top:10px;border:1px solid #b3d9c4;background:var(--green-bg);border-radius:6px;padding:10px 12px}
+.copy-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px}
+.copy-label{width:110px;color:var(--muted);font-weight:500;flex-shrink:0}
+.copy-value{flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{border:1px solid var(--border);background:var(--surface);border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;flex-shrink:0}
+.copy-btn:hover{border-color:var(--green);color:var(--green)}
+.copy-btn.copied{background:var(--green);color:#fff;border-color:var(--green)}
+
 @media(max-width:720px){
   .shell{grid-template-columns:1fr}
   .left-panel{border-right:none;border-bottom:1px solid var(--border)}
@@ -240,6 +249,7 @@ AI will figure out the fields from whatever format you give it."></textarea>
       <button class="fill-btn" id="ride-submit-btn" onclick="submitToRide()" style="margin-top:8px;background:var(--green);color:#fff;">
         ⬆ Submit to RiDE DMV Airtable
       </button>
+      <div class="copy-panel" id="ride-copy-panel" style="display:none"></div>
       <div class="dl-row" id="dl-row">
         <div class="dl-icon">✅</div>
         <div>
@@ -698,21 +708,67 @@ async function fillBoth() {
 const RIDE_AIRTABLE_URL = 'https://airtable.com/appI9OhdUL1pd2pnZ/pagAxAOtFx3aTxuMs?VnNkC=sfsNAjeVbtDqb7O7I';
 const RIDE_PROCESSING_TYPE = 'Title & Reg';
 
+const RIDE_COPY_FIELDS = [
+  { label: 'Processing Type', value: () => RIDE_PROCESSING_TYPE },
+  { label: 'Year',            value: () => getVal('year') },
+  { label: 'Make',            value: () => getVal('make') },
+  { label: 'Model',           value: () => getVal('model') },
+  { label: 'VIN',             value: () => getVal('vin') },
+  { label: 'Owner Name',      value: () => getVal('applicant_name') },
+];
+
 function submitToRide() {
-  if (!RIDE_AIRTABLE_URL) {
-    setStatus('RiDE DMV Airtable submission is not configured yet — set RIDE_AIRTABLE_URL in index.html to the shared Airtable form URL.', 'err');
-    return;
+  window.open(RIDE_AIRTABLE_URL, '_blank');
+  renderRideCopyPanel();
+  setStatus('Airtable opened in a new tab — copy each field across with the buttons below.', 'ok');
+}
+
+function renderRideCopyPanel() {
+  const panel = document.getElementById('ride-copy-panel');
+  panel.innerHTML = '';
+  RIDE_COPY_FIELDS.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'copy-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'copy-label';
+    lbl.textContent = f.label;
+    const val = document.createElement('span');
+    val.className = 'copy-value';
+    val.textContent = f.value() || '—';
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.onclick = () => copyRideValue(btn, f.value());
+    row.append(lbl, val, btn);
+    panel.appendChild(row);
+  });
+  panel.style.display = 'block';
+}
+
+function copyRideValue(btn, value) {
+  const done = ok => {
+    if (!ok) { setStatus('Could not copy — select the value and copy manually.', 'err'); return; }
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(value).then(() => done(true), () => done(legacyCopy(value)));
+  } else {
+    done(legacyCopy(value));
   }
-  // Airtable form prefill — param names must match the Airtable field names exactly
-  const p = new URLSearchParams();
-  p.set('prefill_Processing Type', RIDE_PROCESSING_TYPE);
-  p.set('prefill_Year',       getVal('year'));
-  p.set('prefill_Make',       getVal('make'));
-  p.set('prefill_Model',      getVal('model'));
-  p.set('prefill_VIN',        getVal('vin'));
-  p.set('prefill_Owner Name', getVal('applicant_name'));
-  window.open(RIDE_AIRTABLE_URL + (RIDE_AIRTABLE_URL.includes('?') ? '&' : '?') + p.toString(), '_blank');
-  setStatus('Opened RiDE DMV Airtable submission in a new tab.', 'ok');
+}
+
+function legacyCopy(value) {
+  const ta = document.createElement('textarea');
+  ta.value = value;
+  ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) {}
+  document.body.removeChild(ta);
+  return ok;
 }
 
 // ── Form tab switching ─────────────────────────────────────
