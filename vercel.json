@@ -2,7 +2,7 @@
   "version": 2,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/shipping", "destination": "/public/shipping.html" },
+    { "source": "/shipping", "destination": "/shipping.html" },
     { "source": "/(.*)", "destination": "/public/index.html" }
   ]
 }
