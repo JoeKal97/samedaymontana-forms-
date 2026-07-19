@@ -140,6 +140,34 @@ input[type=file]{display:none}
   .left-panel{border-right:none;border-bottom:1px solid var(--border)}
   .header-right{display:none}
 }
+
+.ship-panel{margin-top:20px;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.ship-head{background:var(--navy);color:#fff;padding:10px 16px;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.ship-head span{font-size:11px;color:rgba(255,255,255,.5);font-family:"IBM Plex Mono",monospace}
+.ship-body{padding:16px;display:none}
+.ship-body.open{display:block}
+.ship-mode-tabs{display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:5px;overflow:hidden}
+.ship-mode-tab{flex:1;padding:7px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:var(--surface);color:var(--muted);text-align:center;transition:.15s}
+.ship-mode-tab.active{background:var(--navy);color:#fff}
+.ship-mode-tab+.ship-mode-tab{border-left:1px solid var(--border)}
+.ship-pane{display:none}.ship-pane.active{display:block}
+.ship-field{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.ship-field label{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.ship-field input{border:1px solid var(--border);border-radius:4px;padding:6px 9px;font-size:12px;font-family:"IBM Plex Sans",sans-serif;color:var(--text);background:var(--surface)}
+.ship-field input:focus{outline:none;border-color:var(--navy)}
+.ship-field input.prefilled{background:#f0f7ff;border-color:#b8d4f0}
+.ship-batch-ta{width:100%;min-height:120px;border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-size:12px;font-family:"IBM Plex Mono",monospace;color:var(--text);background:var(--surface);resize:vertical;line-height:1.6;margin-bottom:10px}
+.ship-batch-hint{font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+.ship-batch-hint code{font-family:"IBM Plex Mono",monospace;font-size:10px;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3px}
+.ship-btn{width:100%;padding:10px;background:var(--gold);color:var(--navy);border:none;border-radius:5px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.ship-btn:hover{background:var(--gold-lt)}.ship-btn:disabled{opacity:.4;cursor:not-allowed}
+.ship-results{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.ship-result{padding:10px 12px;border-radius:5px;font-size:12px;border:1px solid var(--border)}
+.ship-result.ok{background:var(--green-bg);border-color:#b3d9c4}
+.ship-result.err{background:var(--red-bg);border-color:#f0b8b8;color:var(--red)}
+.ship-result-name{font-weight:600;margin-bottom:4px}
+.ship-result-track{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+.ship-result-dl{display:inline-block;margin-top:6px;padding:4px 10px;background:var(--navy);color:#fff;border-radius:3px;font-size:11px;font-weight:500;text-decoration:none}
 </style>
 </head>
 <body>
@@ -257,6 +285,38 @@ AI will figure out the fields from whatever format you give it."></textarea>
           <div class="dl-hint">Print and sign — signature lines left blank for wet signature</div>
         </div>
       </div>
+
+<div class="ship-panel" id="ship-panel">
+  <div class="ship-head" onclick="toggleShipPanel()">
+    📦 Create Shipping Label
+    <span id="ship-toggle-label">▼ expand</span>
+  </div>
+  <div class="ship-body" id="ship-body">
+    <div class="ship-mode-tabs">
+      <button class="ship-mode-tab active" onclick="switchShipMode('single')">Single Label</button>
+      <button class="ship-mode-tab" onclick="switchShipMode('batch')">Batch Labels</button>
+    </div>
+    <div class="ship-pane active" id="ship-pane-single">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
+        <div class="ship-field" style="grid-column:span 2"><label>LLC Name (Name field in Shippo)</label><input type="text" id="ship-llc" placeholder="Big Sky Holdings LLC"></div>
+        <div class="ship-field" style="grid-column:span 2"><label>c/o Individual Name (Company field)</label><input type="text" id="ship-co" placeholder="John Smith"></div>
+        <div class="ship-field" style="grid-column:span 2"><label>Street Address</label><input type="text" id="ship-street1" placeholder="123 Main St"></div>
+        <div class="ship-field" style="grid-column:span 2"><label>Street Line 2</label><input type="text" id="ship-street2" placeholder=""></div>
+        <div class="ship-field"><label>City</label><input type="text" id="ship-city" placeholder="Missoula"></div>
+        <div class="ship-field"><label>State</label><input type="text" id="ship-state" placeholder="MT" maxlength="2"></div>
+        <div class="ship-field"><label>Zip</label><input type="text" id="ship-zip" placeholder="59801" maxlength="10"></div>
+      </div>
+      <button class="ship-btn" id="ship-single-btn" onclick="createSingleLabel()">📦 Create USPS Label</button>
+    </div>
+    <div class="ship-pane" id="ship-pane-batch">
+      <div class="ship-batch-hint">One LLC per block, blank line between.<br>
+        <code>LLC Name</code> first line, then address. Put <code>c/o Name</code> anywhere in the block.</div>
+      <textarea class="ship-batch-ta" id="ship-batch-ta" placeholder="Big Sky Holdings LLC&#10;123 Main St&#10;Missoula MT 59801&#10;c/o John Smith&#10;&#10;Peak View LLC&#10;456 Oak Ave&#10;Billings MT 59101&#10;c/o Jane Doe"></textarea>
+      <button class="ship-btn" id="ship-batch-btn" onclick="createBatchLabels()">📦 Create All Labels</button>
+    </div>
+    <div class="ship-results" id="ship-results"></div>
+  </div>
+</div>
     </div>
   </div>
 
@@ -802,6 +862,81 @@ document.getElementById('form-tabs').addEventListener('click', e => {
   tab.classList.add('active');
   currentForm = tab.dataset.form;
 });
+
+// ── Shippo shipping labels ─────────────────────────────────
+function parseShippoAddress(llcName, rawAddress) {
+  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',city:'',state:'',zip:''};
+  const lines = rawAddress.split(/\n/).map(l=>l.trim()).filter(Boolean);
+  let co_name='',street1='',street2='',city='',state='',zip='';
+  const coIdx = lines.findIndex(l=>/^c\/o\s+/i.test(l));
+  if (coIdx>=0){co_name=lines[coIdx].replace(/^c\/o\s+/i,'').trim();lines.splice(coIdx,1);}
+  const re=/^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i;
+  let ci=-1;
+  for(let i=lines.length-1;i>=0;i--){const m=lines[i].match(re);if(m){city=m[1].trim();state=m[2].toUpperCase();zip=m[3];ci=i;break;}}
+  const sl=ci>=0?lines.slice(0,ci):lines;
+  street1=sl[0]||'';street2=sl[1]||'';
+  return {llc_name:llcName,co_name,street1,street2,city,state,zip};
+}
+function parseBatchAddresses(text){
+  return text.trim().split(/\n\s*\n/).map(block=>{
+    const lines=block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
+    if(!lines.length)return null;
+    return parseShippoAddress(lines[0],lines.slice(1).join('\n'));
+  }).filter(Boolean);
+}
+function toggleShipPanel(){
+  const body=document.getElementById('ship-body');
+  const lbl=document.getElementById('ship-toggle-label');
+  const open=body.classList.toggle('open');
+  lbl.textContent=open?'▲ collapse':'▼ expand';
+  if(open)prefillShipFromForm();
+}
+function switchShipMode(mode){
+  document.querySelectorAll('.ship-mode-tab').forEach((t,i)=>t.classList.toggle('active',['single','batch'][i]===mode));
+  document.querySelectorAll('.ship-pane').forEach((p,i)=>p.classList.toggle('active',['ship-pane-single','ship-pane-batch'][i]===`ship-pane-${mode}`));
+}
+function prefillShipFromForm(){
+  const map={applicant_name:'ship-llc',mailing_address:'ship-street1',mailing_city:'ship-city',mailing_state:'ship-state',mailing_zip:'ship-zip'};
+  Object.entries(map).forEach(([fk,sid])=>{const v=getVal(fk);if(v){const el=document.getElementById(sid);el.value=v;el.classList.add('prefilled');}});
+}
+async function createSingleLabel(){
+  const s={llc_name:document.getElementById('ship-llc').value.trim(),co_name:document.getElementById('ship-co').value.trim(),street1:document.getElementById('ship-street1').value.trim(),street2:document.getElementById('ship-street2').value.trim(),city:document.getElementById('ship-city').value.trim(),state:document.getElementById('ship-state').value.trim(),zip:document.getElementById('ship-zip').value.trim()};
+  if(!s.llc_name||!s.street1||!s.city||!s.zip){setStatus('Fill in LLC name, street, city and zip.','err');return;}
+  const btn=document.getElementById('ship-single-btn');btn.disabled=true;btn.innerHTML='<span class="spin">⟳</span> Creating label...';
+  await submitLabels([s]);
+  btn.disabled=false;btn.innerHTML='📦 Create USPS Label';
+}
+async function createBatchLabels(){
+  const text=document.getElementById('ship-batch-ta').value.trim();
+  if(!text){setStatus('Paste at least one LLC and address.','err');return;}
+  const shipments=parseBatchAddresses(text);
+  if(!shipments.length){setStatus('Could not parse any addresses.','err');return;}
+  const btn=document.getElementById('ship-batch-btn');btn.disabled=true;btn.innerHTML=`<span class="spin">⟳</span> Creating ${shipments.length} label(s)...`;
+  await submitLabels(shipments);
+  btn.disabled=false;btn.innerHTML='📦 Create All Labels';
+}
+async function submitLabels(shipments){
+  try{
+    const resp=await fetch(`${API_BASE}/api/shippo-label`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shipments})});
+    const json=await resp.json();
+    if(!resp.ok)throw new Error(json.error||'Label creation failed');
+    renderShipResults(json.labels);
+  }catch(e){setStatus('Shippo error: '+e.message,'err');}
+}
+function renderShipResults(labels){
+  const c=document.getElementById('ship-results');c.innerHTML='';
+  labels.forEach(label=>{
+    const div=document.createElement('div');
+    div.className='ship-result '+(label.status==='success'?'ok':'err');
+    if(label.status==='success'){
+      div.innerHTML=`<div class="ship-result-name">${label.llc_name}${label.co_name?' <span style="font-weight:400;color:var(--muted)">c/o '+label.co_name+'</span>':''}</div><div class="ship-result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="ship-result-track">Tracking: ${label.tracking_number}</div><a class="ship-result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
+    }else{
+      div.innerHTML=`<div class="ship-result-name">${label.llc_name||'Unknown'}</div><div>${label.error}</div>`;
+    }
+    c.appendChild(div);
+  });
+  if(labels.every(l=>l.status==='success'))setStatus(`✅ ${labels.length} label(s) created — download below.`,'ok');
+}
 </script>
 </body>
 </html>
