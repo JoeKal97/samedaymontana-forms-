@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Same Day Montana — Shipping Labels</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+:root {
+  --navy:    #0C1F3D;
+  --navy2:   #163060;
+  --gold:    #C8952A;
+  --gold-lt: #E8B84B;
+  --bg:      #F4F2ED;
+  --surface: #FFFFFF;
+  --border:  #D6D1C7;
+  --muted:   #7A7468;
+  --text:    #1A1610;
+  --green:   #1E6E3C;
+  --green-bg:#E6F4EC;
+  --red:     #8B2020;
+  --red-bg:  #FAE8E8;
+  --amber-bg:#FBF3E2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+header{background:var(--navy);height:58px;display:flex;align-items:center;padding:0 28px;gap:14px;border-bottom:3px solid var(--gold);position:sticky;top:0;z-index:50}
+.logo-badge{width:32px;height:32px;background:var(--gold);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;color:var(--navy)}
+.logo-name{color:#fff;font-weight:600;font-size:15px}
+.logo-name span{color:var(--gold-lt)}
+.nav-links{margin-left:auto;display:flex;gap:2px}
+.nav-link{padding:6px 14px;border-radius:4px;font-size:12px;font-weight:500;text-decoration:none;background:rgba(255,255,255,.08);color:rgba(255,255,255,.6);transition:.15s}
+.nav-link:hover{background:rgba(255,255,255,.14);color:#fff}
+.nav-link.active{background:var(--gold);color:var(--navy);font-weight:600}
+
+.wrap{max-width:720px;margin:0 auto;padding:28px 24px 48px}
+.page-title{font-size:16px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.page-sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+
+.mode-tabs{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:18px}
+.mode-tab{flex:1;padding:9px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:var(--surface);color:var(--muted);text-align:center;transition:.15s}
+.mode-tab.active{background:var(--navy);color:#fff}
+.mode-tab+.mode-tab{border-left:1px solid var(--border)}
+.pane{display:none}.pane.active{display:block}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:16px}
+.field{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.field label{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.field input{border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface)}
+.field input:focus{outline:none;border-color:var(--navy)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.span2{grid-column:span 2}
+
+.btn{width:100%;padding:11px;border:none;border-radius:6px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.btn-navy{background:var(--navy);color:#fff}.btn-navy:hover{background:var(--navy2)}
+.btn-gold{background:var(--gold);color:var(--navy)}.btn-gold:hover{background:var(--gold-lt)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+.queue-list{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.queue-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--amber-bg);border:1px solid #e8d08a;border-radius:6px;font-size:12px}
+.queue-item .qi-body{flex:1}
+.queue-item .qi-name{font-weight:600}
+.queue-item .qi-addr{color:var(--muted);font-size:11px;margin-top:2px}
+.queue-item .qi-x{cursor:pointer;opacity:.6;font-size:13px}
+.queue-item .qi-x:hover{opacity:1;color:var(--red)}
+.queue-empty{font-size:12px;color:var(--muted);text-align:center;padding:14px}
+
+.bulk-ta{width:100%;min-height:150px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text);background:var(--surface);resize:vertical;line-height:1.6;margin-bottom:10px}
+.bulk-hint{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+.bulk-hint code{font-family:'IBM Plex Mono',monospace;font-size:10px;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3px}
+
+.status-bar{margin:12px 0;padding:9px 12px;border-radius:6px;font-size:12px;display:none;line-height:1.4}
+.status-bar.visible{display:block}
+.status-bar.loading{background:var(--amber-bg);color:#7a5a10;border:1px solid #e8d08a}
+.status-bar.ok{background:var(--green-bg);color:var(--green);border:1px solid #b3d9c4}
+.status-bar.err{background:var(--red-bg);color:var(--red);border:1px solid #f0b8b8}
+
+.results{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.result{padding:10px 12px;border-radius:6px;font-size:12px;border:1px solid var(--border)}
+.result.ok{background:var(--green-bg);border-color:#b3d9c4}
+.result.err{background:var(--red-bg);border-color:#f0b8b8;color:var(--red)}
+.result-name{font-weight:600;margin-bottom:4px}
+.result-track{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)}
+.result-dl{display:inline-block;margin-top:6px;padding:4px 10px;background:var(--navy);color:#fff;border-radius:3px;font-size:11px;font-weight:500;text-decoration:none}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .7s linear infinite}
+
+@media(max-width:560px){ .grid2{grid-template-columns:1fr} .span2{grid-column:span 1} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">SDM</div>
+  <div class="logo-name">Same Day <span>Montana</span></div>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Form Filler</a>
+    <a class="nav-link active" href="/shipping">Shipping</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="page-title">USPS Shipping Labels</div>
+  <div class="page-sub">Create USPS Ground Advantage labels via Shippo. Ships from 5Star Registration, Missoula MT.</div>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="switchMode('queue')">Add One at a Time</button>
+    <button class="mode-tab" onclick="switchMode('bulk')">Bulk Paste</button>
+  </div>
+
+  <!-- Queue mode -->
+  <div class="pane active" id="pane-queue">
+    <div class="card">
+      <div class="grid2">
+        <div class="field span2"><label>LLC Name (Name field in Shippo)</label><input type="text" id="q-llc" placeholder="Big Sky Holdings LLC"></div>
+        <div class="field span2"><label>c/o Individual Name (Company field)</label><input type="text" id="q-co" placeholder="John Smith"></div>
+        <div class="field span2"><label>Street Address</label><input type="text" id="q-street1" placeholder="123 Main St"></div>
+        <div class="field span2"><label>Street Line 2</label><input type="text" id="q-street2" placeholder=""></div>
+        <div class="field"><label>City</label><input type="text" id="q-city" placeholder="Missoula"></div>
+        <div class="field"><label>State</label><input type="text" id="q-state" placeholder="MT" maxlength="2"></div>
+        <div class="field"><label>Zip</label><input type="text" id="q-zip" placeholder="59801" maxlength="10"></div>
+      </div>
+      <button class="btn btn-navy" onclick="addToQueue()">＋ Add to Queue</button>
+    </div>
+
+    <div class="queue-list" id="queue-list"></div>
+    <button class="btn btn-gold" id="queue-submit" onclick="submitQueue()" disabled>📦 Create 0 Labels</button>
+  </div>
+
+  <!-- Bulk mode -->
+  <div class="pane" id="pane-bulk">
+    <div class="card">
+      <div class="bulk-hint">One LLC per block, blank line between blocks.<br>
+        <code>LLC Name</code> on the first line, then the address. Put <code>c/o Name</code> anywhere in the block.</div>
+      <textarea class="bulk-ta" id="bulk-ta" placeholder="Big Sky Holdings LLC&#10;123 Main St&#10;Missoula MT 59801&#10;c/o John Smith&#10;&#10;Peak View LLC&#10;456 Oak Ave&#10;Billings MT 59101&#10;c/o Jane Doe"></textarea>
+      <button class="btn btn-gold" id="bulk-submit" onclick="submitBulk()">📦 Create All Labels</button>
+    </div>
+  </div>
+
+  <div class="status-bar" id="status-bar"></div>
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+let queue = [];
+
+function setStatus(msg, type='loading') {
+  const el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.className = 'status-bar visible ' + type;
+}
+
+function switchMode(mode) {
+  document.querySelectorAll('.mode-tab').forEach((t,i)=>t.classList.toggle('active',['queue','bulk'][i]===mode));
+  document.getElementById('pane-queue').classList.toggle('active', mode==='queue');
+  document.getElementById('pane-bulk').classList.toggle('active', mode==='bulk');
+}
+
+// ── Address parsing (shared with the Form Filler shipping panel) ──
+function parseShippoAddress(llcName, rawAddress) {
+  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',city:'',state:'',zip:''};
+  const lines = rawAddress.split(/\n/).map(l=>l.trim()).filter(Boolean);
+  let co_name='',street1='',street2='',city='',state='',zip='';
+  const coIdx = lines.findIndex(l=>/^c\/o\s+/i.test(l));
+  if (coIdx>=0){co_name=lines[coIdx].replace(/^c\/o\s+/i,'').trim();lines.splice(coIdx,1);}
+  const re=/^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i;
+  let ci=-1;
+  for(let i=lines.length-1;i>=0;i--){const m=lines[i].match(re);if(m){city=m[1].trim();state=m[2].toUpperCase();zip=m[3];ci=i;break;}}
+  const sl=ci>=0?lines.slice(0,ci):lines;
+  street1=sl[0]||'';street2=sl[1]||'';
+  return {llc_name:llcName,co_name,street1,street2,city,state,zip};
+}
+function parseBatchAddresses(text){
+  return text.trim().split(/\n\s*\n/).map(block=>{
+    const lines=block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
+    if(!lines.length)return null;
+    return parseShippoAddress(lines[0],lines.slice(1).join('\n'));
+  }).filter(Boolean);
+}
+
+// ── Queue mode ──
+function addToQueue() {
+  const s = {
+    llc_name: document.getElementById('q-llc').value.trim(),
+    co_name:  document.getElementById('q-co').value.trim(),
+    street1:  document.getElementById('q-street1').value.trim(),
+    street2:  document.getElementById('q-street2').value.trim(),
+    city:     document.getElementById('q-city').value.trim(),
+    state:    document.getElementById('q-state').value.trim(),
+    zip:      document.getElementById('q-zip').value.trim(),
+  };
+  if (!s.llc_name || !s.street1 || !s.city || !s.zip) { setStatus('Fill in LLC name, street, city and zip before adding.', 'err'); return; }
+  queue.push(s);
+  ['q-llc','q-co','q-street1','q-street2','q-city','q-state','q-zip'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('q-llc').focus();
+  renderQueue();
+}
+function removeFromQueue(i) { queue.splice(i,1); renderQueue(); }
+function renderQueue() {
+  const list = document.getElementById('queue-list');
+  list.innerHTML = '';
+  if (!queue.length) {
+    const e = document.createElement('div');
+    e.className = 'queue-empty';
+    e.textContent = 'No shipments queued yet — add one above.';
+    list.appendChild(e);
+  } else {
+    queue.forEach((s, i) => {
+      const div = document.createElement('div');
+      div.className = 'queue-item';
+      const co = s.co_name ? ` <span style="font-weight:400;color:var(--muted)">c/o ${s.co_name}</span>` : '';
+      div.innerHTML = `<div class="qi-body"><div class="qi-name">${s.llc_name}${co}</div><div class="qi-addr">${[s.street1,s.street2,`${s.city} ${s.state} ${s.zip}`].filter(Boolean).join(', ')}</div></div>`;
+      const x = document.createElement('div');
+      x.className = 'qi-x'; x.textContent = '✕';
+      x.onclick = () => removeFromQueue(i);
+      div.appendChild(x);
+      list.appendChild(div);
+    });
+  }
+  const btn = document.getElementById('queue-submit');
+  btn.disabled = queue.length === 0;
+  btn.innerHTML = `📦 Create ${queue.length} Label${queue.length===1?'':'s'}`;
+}
+async function submitQueue() {
+  if (!queue.length) return;
+  const btn = document.getElementById('queue-submit');
+  btn.disabled = true; btn.innerHTML = `<span class="spin">⟳</span> Creating ${queue.length} label(s)...`;
+  const ok = await submitLabels(queue);
+  if (ok) { queue = []; renderQueue(); }
+  else { btn.disabled = false; btn.innerHTML = `📦 Create ${queue.length} Label${queue.length===1?'':'s'}`; }
+}
+
+// ── Bulk mode ──
+async function submitBulk() {
+  const text = document.getElementById('bulk-ta').value.trim();
+  if (!text) { setStatus('Paste at least one LLC and address.', 'err'); return; }
+  const shipments = parseBatchAddresses(text);
+  if (!shipments.length) { setStatus('Could not parse any addresses.', 'err'); return; }
+  const btn = document.getElementById('bulk-submit');
+  btn.disabled = true; btn.innerHTML = `<span class="spin">⟳</span> Creating ${shipments.length} label(s)...`;
+  await submitLabels(shipments);
+  btn.disabled = false; btn.innerHTML = '📦 Create All Labels';
+}
+
+// ── Shared submit + results ──
+async function submitLabels(shipments) {
+  setStatus(`Creating ${shipments.length} label(s) via Shippo...`, 'loading');
+  try {
+    const resp = await fetch(`${API_BASE}/api/shippo-label`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shipments }),
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Label creation failed');
+    renderResults(json.labels);
+    return true;
+  } catch(e) {
+    setStatus('Shippo error: ' + e.message, 'err');
+    return false;
+  }
+}
+function renderResults(labels) {
+  const c = document.getElementById('results'); c.innerHTML = '';
+  labels.forEach(label => {
+    const div = document.createElement('div');
+    div.className = 'result ' + (label.status==='success' ? 'ok' : 'err');
+    if (label.status === 'success') {
+      const co = label.co_name ? ` <span style="font-weight:400;color:var(--muted)">c/o ${label.co_name}</span>` : '';
+      div.innerHTML = `<div class="result-name">${label.llc_name}${co}</div><div class="result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="result-track">Tracking: ${label.tracking_number}</div><a class="result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
+    } else {
+      div.innerHTML = `<div class="result-name">${label.llc_name||'Unknown'}</div><div>${label.error}</div>`;
+    }
+    c.appendChild(div);
+  });
+  if (labels.every(l=>l.status==='success')) setStatus(`✅ ${labels.length} label(s) created — download below.`, 'ok');
+  else setStatus('Some labels could not be created — see details below.', 'err');
+}
+
+renderQueue();
+</script>
+</body>
+</html>
