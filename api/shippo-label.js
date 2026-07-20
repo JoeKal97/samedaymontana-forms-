@@ -9,6 +9,7 @@ const FROM_ADDRESS = {
   country: "US",
   phone:   "4065406222",
   email:   "hello@5starregistration.com",
+  validate: false,
 };
 
 module.exports = async function handler(req, res) {
@@ -46,13 +47,15 @@ async function createLabel(shipment) {
       city, state, zip,
       country: "US",
       is_residential: true,
+      validate: false,
     },
     parcels: [{ length:"9", width:"6", height:"1", distance_unit:"in", weight:"4", mass_unit:"oz" }],
     async: false,
   });
 
   if (shipmentResp.status === "ERROR") {
-    return { error: shipmentResp.messages?.[0]?.text || "Shipment failed", llc_name };
+    const msg = shipmentResp.messages?.map(m => m.text).join('; ') || "Shipment creation failed";
+    return { error: msg, llc_name };
   }
 
   const rates = shipmentResp.rates || [];
