@@ -160,25 +160,65 @@ function switchMode(mode) {
   document.getElementById('pane-bulk').classList.toggle('active', mode==='bulk');
 }
 
-// ── Address parsing (shared with the Form Filler shipping panel) ──
-function parseShippoAddress(llcName, rawAddress) {
-  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',city:'',state:'',zip:''};
-  const lines = rawAddress.split(/\n/).map(l=>l.trim()).filter(Boolean);
-  let co_name='',street1='',street2='',city='',state='',zip='';
-  const coIdx = lines.findIndex(l=>/^c\/o\s+/i.test(l));
-  if (coIdx>=0){co_name=lines[coIdx].replace(/^c\/o\s+/i,'').trim();lines.splice(coIdx,1);}
-  const re=/^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i;
-  let ci=-1;
-  for(let i=lines.length-1;i>=0;i--){const m=lines[i].match(re);if(m){city=m[1].trim();state=m[2].toUpperCase();zip=m[3];ci=i;break;}}
-  const sl=ci>=0?lines.slice(0,ci):lines;
-  street1=sl[0]||'';street2=sl[1]||'';
+// ── Address parsing ──────────────────────────────────────────
+// Split a "street + city" chunk (no state/zip) into street1 + city.
+// Handles both "STREET, CITY" (comma) and "STREET CITY" (space, via a
+// street-suffix heuristic that also absorbs unit tokens like #202).
+function splitStreetCity(head){
+  head = head.replace(/,\s*$/,'').trim();
+  const lastComma = head.lastIndexOf(',');
+  if (lastComma >= 0){
+    return { street1: head.slice(0,lastComma).trim(), city: head.slice(lastComma+1).trim() };
+  }
+  const tokens = head.split(/\s+/).filter(Boolean);
+  const SUFFIX = new Set(['ave','avenue','st','street','rd','road','blvd','boulevard','dr','drive','ln','lane','way','ct','court','pl','place','cir','circle','pkwy','parkway','hwy','highway','ter','terrace','trl','trail','loop','sq','square','pike','row','run','path','pt','point','expy','expressway','ext','xing','crossing','byp','bypass','plz','plaza']);
+  const isUnit = t => /^#/.test(t) || /^(apt|apartment|ste|suite|unit|bldg|building|fl|floor|rm|room|no|lot|dept)\.?$/i.test(t) || /^#?\d+[a-z]?$/i.test(t);
+  let suffixIdx = -1;
+  for (let i=0;i<tokens.length;i++){ if (SUFFIX.has(tokens[i].toLowerCase().replace(/\./g,''))) suffixIdx = i; }
+  if (suffixIdx >= 0 && suffixIdx < tokens.length-1){
+    let end = suffixIdx, j = suffixIdx+1;
+    while (j < tokens.length && isUnit(tokens[j])){ end = j; j++; }
+    const city = tokens.slice(end+1).join(' ');
+    if (city) return { street1: tokens.slice(0,end+1).join(' '), city };
+  }
+  if (tokens.length >= 2) return { street1: tokens.slice(0,-1).join(' '), city: tokens[tokens.length-1] };
+  return { street1: head, city: '' };
+}
+// Parse one LLC's address. rawAddress may be multi-line (block paste) OR a
+// single inline line (spreadsheet paste). c/o may be on its own line or inline.
+function parseShippoAddress(llcName, rawAddress){
+  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',street2:'',city:'',state:'',zip:''};
+  let lines = rawAddress.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  let co_name='';
+  const coLine = lines.findIndex(l=>/^c\/o\s+/i.test(l));
+  if (coLine >= 0){ co_name = lines[coLine].replace(/^c\/o\s+/i,'').trim(); lines.splice(coLine,1); }
+  lines = lines.map(l=>{ const m = l.match(/\s*\bc\/o\s+(.+?)\s*$/i); if (m && !co_name){ co_name = m[1].trim(); return l.slice(0,m.index).trim(); } return l; }).filter(Boolean);
+  let street1='',street2='',city='',state='',zip='';
+  const szRe = /^(.*?),?\s*\b([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/;
+  let ci=-1, before='';
+  for (let i=lines.length-1;i>=0;i--){ const m = lines[i].match(szRe); if (m){ before=m[1].trim(); state=m[2].toUpperCase(); zip=m[3]; ci=i; break; } }
+  if (ci < 0){ street1=lines[0]||''; street2=lines[1]||''; return {llc_name:llcName,co_name,street1,street2,city,state,zip}; }
+  const streetLines = lines.slice(0, ci);
+  if (streetLines.length === 0){ const sc = splitStreetCity(before); street1=sc.street1; city=sc.city; }
+  else { street1=streetLines[0]||''; street2=streetLines[1]||''; city=before; }
   return {llc_name:llcName,co_name,street1,street2,city,state,zip};
 }
 function parseBatchAddresses(text){
+  text = (text||'').replace(/\r/g,'');
+  // Tab-separated spreadsheet paste: one record per line (LLC<TAB>full address inline)
+  if (text.indexOf('\t') >= 0){
+    return text.split('\n').filter(l=>l.trim()).map(line=>{
+      const tab = line.indexOf('\t');
+      const llc = (tab>=0 ? line.slice(0,tab) : line).trim();
+      const rest = (tab>=0 ? line.slice(tab+1) : '').replace(/\t/g,' ').trim();
+      return parseShippoAddress(llc, rest);
+    }).filter(Boolean);
+  }
+  // Blank-line separated blocks (one LLC per block, address on following lines)
   return text.trim().split(/\n\s*\n/).map(block=>{
-    const lines=block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
-    if(!lines.length)return null;
-    return parseShippoAddress(lines[0],lines.slice(1).join('\n'));
+    const lines = block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
+    if (!lines.length) return null;
+    return parseShippoAddress(lines[0], lines.slice(1).join('\n'));
   }).filter(Boolean);
 }
 
