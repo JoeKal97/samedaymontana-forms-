@@ -192,7 +192,7 @@ function parseShippoAddress(llcName, rawAddress){
   let co_name='';
   const coLine = lines.findIndex(l=>/^c\/o\s+/i.test(l));
   if (coLine >= 0){ co_name = lines[coLine].replace(/^c\/o\s+/i,'').trim(); lines.splice(coLine,1); }
-  lines = lines.map(l=>{ const m = l.match(/\s*\bc\/o\s+(.+?)\s*$/i); if (m && !co_name){ co_name = m[1].trim(); return l.slice(0,m.index).trim(); } return l; }).filter(Boolean);
+  lines = lines.map(l=>{ const m = l.match(/\s*,?\s*\bc\/o\s+(.+?)\s*$/i); if (m && !co_name){ co_name = m[1].trim(); return l.slice(0,m.index).trim(); } return l; }).filter(Boolean);
   let street1='',street2='',city='',state='',zip='';
   const szRe = /^(.*?),?\s*\b([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/;
   let ci=-1, before='';
