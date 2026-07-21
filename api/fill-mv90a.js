@@ -1,4 +1,4 @@
-const { PDFDocument, rgb, StandardFonts, PDFName, PDFBool } = require("pdf-lib");
+const { PDFDocument, PDFName, PDFBool } = require("pdf-lib");
 const fs = require("fs");
 const path = require("path");
 
@@ -53,15 +53,7 @@ module.exports = async function handler(req, res) {
     setText("Transferee Zip",     "59803");
     setText("Transferee Date",    d.sale_date || "");
 
-    // Draw Joe Kalafat as Transferee signature (typed/electronic)
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
-    const page = pdfDoc.getPages()[0];
-    const pageHeight = page.getHeight();
-    page.drawText("Joe Kalafat", {
-      x: 370, y: pageHeight - 657,
-      size: 14, font, color: rgb(0.05, 0.1, 0.5),
-    });
-    // Transferor signature left blank — wet signature from seller
+    // Signatures left blank for wet signature.
     // NeedAppearances so Acrobat regenerates field appearances (see fill.js)
     form.acroForm.dict.set(PDFName.of("NeedAppearances"), PDFBool.True);
     const filledBytes = await pdfDoc.save({ updateFieldAppearances: false });
