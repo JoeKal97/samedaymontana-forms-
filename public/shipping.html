@@ -203,23 +203,39 @@ function parseShippoAddress(llcName, rawAddress){
   else { street1=streetLines[0]||''; street2=streetLines[1]||''; city=before; }
   return {llc_name:llcName,co_name,street1,street2,city,state,zip};
 }
+// Returns an array of parsed shipments; a `.skipped` count is attached for rows
+// that had no shipping address (empty or "Billing" placeholder).
 function parseBatchAddresses(text){
   text = (text||'').replace(/\r/g,'');
-  // Tab-separated spreadsheet paste: one record per line (LLC<TAB>full address inline)
+  let rows = [];
   if (text.indexOf('\t') >= 0){
-    return text.split('\n').filter(l=>l.trim()).map(line=>{
-      const tab = line.indexOf('\t');
-      const llc = (tab>=0 ? line.slice(0,tab) : line).trim();
-      const rest = (tab>=0 ? line.slice(tab+1) : '').replace(/\t/g,' ').trim();
-      return parseShippoAddress(llc, rest);
+    // Tab-separated. Two shapes:
+    //  - Full spreadsheet dump (>2 cols): LLC in column 1, address in column 11.
+    //  - Simple 2-col: LLC<TAB>address inline.
+    rows = text.split('\n').filter(l=>l.trim()).map(line=>{
+      const cols = line.split('\t');
+      if (cols.length > 2) return { llc:(cols[0]||'').trim(), addr:(cols[10]||'').trim() };
+      return { llc:(cols[0]||'').trim(), addr:cols.slice(1).join(' ').trim() };
+    });
+  } else {
+    // Blank-line separated blocks (one LLC per block, address on following lines)
+    rows = text.trim().split(/\n\s*\n/).map(block=>{
+      const lines = block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
+      if (!lines.length) return null;
+      return { llc: lines[0], addr: lines.slice(1).join('\n') };
     }).filter(Boolean);
   }
-  // Blank-line separated blocks (one LLC per block, address on following lines)
-  return text.trim().split(/\n\s*\n/).map(block=>{
-    const lines = block.trim().split('\n').map(l=>l.trim()).filter(Boolean);
-    if (!lines.length) return null;
-    return parseShippoAddress(lines[0], lines.slice(1).join('\n'));
-  }).filter(Boolean);
+  const shipments = []; let skipped = 0;
+  rows.forEach(r=>{
+    if (!r || !r.llc) return;
+    const addr = (r.addr||'').trim();
+    if (!addr || /^billing$/i.test(addr)){ skipped++; return; }   // no shipping address
+    const parsed = parseShippoAddress(r.llc, addr);
+    if (!parsed.street1 && !parsed.zip){ skipped++; return; }      // nothing usable
+    shipments.push(parsed);
+  });
+  shipments.skipped = skipped;
+  return shipments;
 }
 
 // ── Queue mode ──
@@ -269,6 +285,7 @@ async function submitQueue() {
   if (!queue.length) return;
   const btn = document.getElementById('queue-submit');
   btn.disabled = true; btn.innerHTML = `<span class="spin">⟳</span> Creating ${queue.length} label(s)...`;
+  setStatus(`Creating ${queue.length} label(s)...`, 'loading');
   const ok = await submitLabels(queue);
   if (ok) { queue = []; renderQueue(); }
   else { btn.disabled = false; btn.innerHTML = `📦 Create ${queue.length} Label${queue.length===1?'':'s'}`; }
@@ -279,16 +296,19 @@ async function submitBulk() {
   const text = document.getElementById('bulk-ta').value.trim();
   if (!text) { setStatus('Paste at least one LLC and address.', 'err'); return; }
   const shipments = parseBatchAddresses(text);
-  if (!shipments.length) { setStatus('Could not parse any addresses.', 'err'); return; }
+  const skipped = shipments.skipped || 0;
+  const skipNote = skipped ? ` (${skipped} skipped — no address)` : '';
+  if (!shipments.length) { setStatus(`No usable addresses found${skipNote}.`, 'err'); return; }
   const btn = document.getElementById('bulk-submit');
   btn.disabled = true; btn.innerHTML = `<span class="spin">⟳</span> Creating ${shipments.length} label(s)...`;
+  setStatus(`Creating ${shipments.length} label(s)${skipNote}`, 'loading');
   await submitLabels(shipments);
   btn.disabled = false; btn.innerHTML = '📦 Create All Labels';
 }
 
 // ── Shared submit + results ──
 async function submitLabels(shipments) {
-  setStatus(`Creating ${shipments.length} label(s) via Shippo...`, 'loading');
+  // status is set by the caller (submitBulk / submitQueue) so the skipped note persists
   try {
     const resp = await fetch(`${API_BASE}/api/shippo-label`, {
       method: 'POST',
