@@ -184,6 +184,36 @@ function splitStreetCity(head){
   if (tokens.length >= 2) return { street1: tokens.slice(0,-1).join(' '), city: tokens[tokens.length-1] };
   return { street1: head, city: '' };
 }
+const STATE_MAP = {
+  'alabama':'AL','alaska':'AK','arizona':'AZ','arkansas':'AR','california':'CA',
+  'colorado':'CO','connecticut':'CT','delaware':'DE','florida':'FL','georgia':'GA',
+  'hawaii':'HI','idaho':'ID','illinois':'IL','indiana':'IN','iowa':'IA',
+  'kansas':'KS','kentucky':'KY','louisiana':'LA','maine':'ME','maryland':'MD',
+  'massachusetts':'MA','michigan':'MI','minnesota':'MN','mississippi':'MS',
+  'missouri':'MO','montana':'MT','nebraska':'NE','nevada':'NV',
+  'new hampshire':'NH','new jersey':'NJ','new mexico':'NM','new york':'NY',
+  'north carolina':'NC','north dakota':'ND','ohio':'OH','oklahoma':'OK',
+  'oregon':'OR','pennsylvania':'PA','rhode island':'RI','south carolina':'SC',
+  'south dakota':'SD','tennessee':'TN','texas':'TX','utah':'UT','vermont':'VT',
+  'virginia':'VA','washington':'WA','west virginia':'WV','wisconsin':'WI','wyoming':'WY'
+};
+function resolveState(s) {
+  if (!s) return '';
+  const clean = s.trim().toLowerCase();
+  if (STATE_MAP[clean]) return STATE_MAP[clean];
+  if (/^[a-z]{2}$/i.test(s.trim())) return s.trim().toUpperCase();
+  return s.trim().toUpperCase();
+}
+function matchStateZip(line) {
+  // Try 2-letter abbrev first
+  let m = line.match(/^(.*?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/i);
+  if (m) return { before: m[1].trim(), state: resolveState(m[2]), zip: m[3] };
+  // Try full state name (longest first to handle "west virginia" before "virginia")
+  const pat = Object.keys(STATE_MAP).sort((a,b)=>b.length-a.length).map(s=>s.replace(/\s+/g,'\\s+')).join('|');
+  m = line.match(new RegExp('^(.*?),?\\s+(' + pat + ')\\s+(\\d{5}(?:-\\d{4})?)\\s*$', 'i'));
+  if (m) return { before: m[1].trim(), state: resolveState(m[2]), zip: m[3] };
+  return null;
+}
 // Parse one LLC's address. rawAddress may be multi-line (block paste) OR a
 // single inline line (spreadsheet paste). c/o may be on its own line or inline.
 function parseShippoAddress(llcName, rawAddress){
@@ -194,9 +224,8 @@ function parseShippoAddress(llcName, rawAddress){
   if (coLine >= 0){ co_name = lines[coLine].replace(/^c\/o\s+/i,'').trim(); lines.splice(coLine,1); }
   lines = lines.map(l=>{ const m = l.match(/\s*,?\s*\bc\/o\s+(.+?)\s*$/i); if (m && !co_name){ co_name = m[1].trim(); return l.slice(0,m.index).trim(); } return l; }).filter(Boolean);
   let street1='',street2='',city='',state='',zip='';
-  const szRe = /^(.*?),?\s*\b([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/;
   let ci=-1, before='';
-  for (let i=lines.length-1;i>=0;i--){ const m = lines[i].match(szRe); if (m){ before=m[1].trim(); state=m[2].toUpperCase(); zip=m[3]; ci=i; break; } }
+  for (let i=lines.length-1;i>=0;i--){ const r=matchStateZip(lines[i]); if (r){ before=r.before; state=r.state; zip=r.zip; ci=i; break; } }
   if (ci < 0){ street1=lines[0]||''; street2=lines[1]||''; return {llc_name:llcName,co_name,street1,street2,city,state,zip}; }
   const streetLines = lines.slice(0, ci);
   if (streetLines.length === 0){ const sc = splitStreetCity(before); street1=sc.street1; city=sc.city; }
