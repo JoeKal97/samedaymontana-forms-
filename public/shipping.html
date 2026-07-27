@@ -166,6 +166,9 @@ function switchMode(mode) {
 // street-suffix heuristic that also absorbs unit tokens like #202).
 function splitStreetCity(head){
   head = head.replace(/,\s*$/,'').trim();
+  // PO Box: everything after the box number is the city
+  const po = head.match(/^\s*(p\.?\s*o\.?\s*box\s+[\w-]+)[,\s]+(.+)$/i);
+  if (po) return { street1: po[1].trim(), city: po[2].replace(/^,\s*/, '').trim() };
   const lastComma = head.lastIndexOf(',');
   if (lastComma >= 0){
     return { street1: head.slice(0,lastComma).trim(), city: head.slice(lastComma+1).trim() };
@@ -353,6 +356,13 @@ async function submitLabels(shipments) {
     return false;
   }
 }
+function copyTracking(btn, num) {
+  navigator.clipboard.writeText(num).then(() => {
+    const t = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = t; }, 1200);
+  });
+}
 function renderResults(labels) {
   const c = document.getElementById('results'); c.innerHTML = '';
   labels.forEach(label => {
@@ -360,7 +370,7 @@ function renderResults(labels) {
     div.className = 'result ' + (label.status==='success' ? 'ok' : 'err');
     if (label.status === 'success') {
       const co = label.co_name ? ` <span style="font-weight:400;color:var(--muted)">c/o ${label.co_name}</span>` : '';
-      div.innerHTML = `<div class="result-name">${label.llc_name}${co}</div><div class="result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="result-track">Tracking: ${label.tracking_number}</div><a class="result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
+      div.innerHTML = `<div class="result-name">${label.llc_name}${co}</div><div class="result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="result-track">Tracking: ${label.tracking_number} <button onclick="copyTracking(this,'${label.tracking_number}')" style="font-size:10px;padding:2px 7px;margin-left:6px;background:#0C1F3D;color:#fff;border:none;border-radius:3px;cursor:pointer">⧉ Copy</button></div><a class="result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
     } else {
       div.innerHTML = `<div class="result-name">${label.llc_name||'Unknown'}</div><div>${label.error}</div>`;
     }
