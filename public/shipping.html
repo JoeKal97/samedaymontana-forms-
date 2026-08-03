@@ -87,6 +87,7 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
 .sheet-block{border-radius:6px;padding:11px 13px;margin-top:12px;font-size:12px}
 .sheet-block.ok{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
 .sheet-block.warn{background:var(--amber-bg);border:1px solid var(--gold);color:#7A5A12}
+.sheet-block.preview{background:var(--amber-bg);border:1px dashed var(--gold);color:#7A5A12}
 .sheet-block.err{background:var(--red-bg);border:1px solid var(--red);color:var(--red)}
 .sheet-block .sb-title{font-weight:600;margin-bottom:5px}
 .sheet-block .sb-item{font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.7}
@@ -119,6 +120,11 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
     <span id="sheet-row-text">Connect Google to write tracking numbers back to the registrations sheet.</span>
     <button class="btn-mini" id="sheet-connect" onclick="sheetsConnect()">Connect Google</button>
   </div>
+
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:8px;cursor:pointer">
+    <input type="checkbox" id="sheet-dry-run" checked style="accent-color:var(--navy);cursor:pointer">
+    Dry run — show which rows would be written without changing the sheet
+  </label>
 
   <div class="mode-tabs">
     <button class="mode-tab active" onclick="switchMode('queue')">Add One at a Time</button>
@@ -425,7 +431,10 @@ async function writeTrackingToSheet(labels) {
     const resp = await fetch(`${API_BASE}/api/sheet-write-tracking`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + driveToken },
-      body: JSON.stringify({ labels: eligible.map(l => ({ llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number })) }),
+      body: JSON.stringify({
+        labels: eligible.map(l => ({ llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number })),
+        dry_run: document.getElementById('sheet-dry-run').checked,
+      }),
     });
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || 'Sheet write failed');
@@ -445,9 +454,17 @@ const SKIP_REASONS = {
 function renderSheetResults(json) {
   const box = document.getElementById('sheet-results');
   const written = json.written || [];
+  const planned = json.planned || [];
   const skipped = json.skipped || [];
   let html = '';
-  if (written.length) {
+  // A dry run reports `planned` and writes nothing — never style it as done.
+  if (json.dry_run) {
+    html += `<div class="sheet-block preview"><div class="sb-title">Dry run — nothing written${planned.length ? ` (${planned.length} row(s) would be updated)` : ''}</div>` +
+      (planned.length
+        ? planned.map(p => `<div class="sb-item">${p.llc_name} → row ${p.row}, column G — ${p.tracking_number}</div>`).join('')
+        : `<div class="sb-item">No rows matched — nothing would be written.</div>`) +
+      `<div class="sb-item" style="margin-top:5px">Uncheck “Dry run” and create the labels again to write for real.</div></div>`;
+  } else if (written.length) {
     html += `<div class="sheet-block ok"><div class="sb-title">✓ ${written.length} tracking number(s) written to the sheet</div>` +
       written.map(w => `<div class="sb-item">${w.llc_name} — ${w.tracking_number} → row ${w.row}</div>`).join('') + `</div>`;
   }
