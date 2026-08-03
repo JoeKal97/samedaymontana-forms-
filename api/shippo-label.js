@@ -32,9 +32,10 @@ module.exports = async function handler(req, res) {
 };
 
 async function createLabel(shipment) {
-  const { llc_name, co_name, street1, street2, city, state, zip } = shipment;
+  // vin is carried for client-side reconciliation only — never sent to Shippo.
+  const { llc_name, co_name, street1, street2, city, state, zip, vin } = shipment;
   if (!llc_name || !street1 || !city || !state || !zip) {
-    return { error: "Missing required fields", llc_name };
+    return { error: "Missing required fields", llc_name, vin: vin || "" };
   }
 
   const shipmentResp = await shippoPost("shipments", {
@@ -55,7 +56,7 @@ async function createLabel(shipment) {
 
   if (shipmentResp.status === "ERROR") {
     const msg = shipmentResp.messages?.map(m => m.text).join('; ') || "Shipment creation failed";
-    return { error: msg, llc_name };
+    return { error: msg, llc_name, vin: vin || "" };
   }
 
   const rates = shipmentResp.rates || [];
@@ -65,7 +66,7 @@ async function createLabel(shipment) {
      r.servicelevel?.name?.toLowerCase().includes("ground advantage"))
   ) || rates.find(r => r.provider === "USPS") || rates[0];
 
-  if (!rate) return { error: "No USPS rate available", llc_name };
+  if (!rate) return { error: "No USPS rate available", llc_name, vin: vin || "" };
 
   const tx = await shippoPost("transactions", {
     rate: rate.object_id,
@@ -73,10 +74,11 @@ async function createLabel(shipment) {
     async: false,
   });
 
-  if (tx.status === "ERROR") return { error: tx.messages?.[0]?.text || "Label purchase failed", llc_name };
+  if (tx.status === "ERROR") return { error: tx.messages?.[0]?.text || "Label purchase failed", llc_name, vin: vin || "" };
 
   return {
     llc_name, co_name: co_name || "",
+    vin: vin || "",
     tracking_number: tx.tracking_number,
     label_url: tx.label_url,
     rate: rate.amount,
