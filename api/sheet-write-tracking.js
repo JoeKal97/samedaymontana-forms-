@@ -1,10 +1,12 @@
 // Writes Shippo tracking numbers back into the registrations sheet.
 //
-// Matching is deliberately conservative: a tracking number is written only when
-// exactly one row matches on both LLC name and VIN last-4, and that row's
-// tracking cell is still empty. Anything else is reported back for Joe to
-// handle by hand rather than guessed at — a wrong tracking number on a row is
-// worse than a missing one.
+// Matching is deliberately conservative. A tracking number is written only when
+// the target row is unambiguous and its tracking cell is still empty. When an
+// LLC has several rows for the same vehicle (a title and a registration, say),
+// an already-filled tracking cell rules that row out; if that still leaves more
+// than one candidate the row is never guessed at — the candidates come back as
+// `needs_choice` for the operator to pick from. A wrong tracking number on a
+// row is worse than a missing one.
 
 const SHEET_ID = "1O3mI4i465BqJABKKq9ljeMynRUqTHhgruI0xZim2Xrk";
 
@@ -34,47 +36,19 @@ module.exports = async function handler(req, res) {
 
   try {
     const sheetTitle = await getFirstSheetTitle(token);
-    const { llc, vin, tracking } = await readColumns(token, sheetTitle);
+    const cols = await readColumns(token, sheetTitle);
+    const { llc, vin, tracking } = cols;
 
     const written = [];
     const skipped = [];
     const writes = [];
     const claimedRows = new Set();
 
-    for (const label of labels) {
-      const llcName = String(label.llc_name || "").trim();
-      const vinLast4 = last4(label.vin);
-      if (!vinLast4) {
-        skipped.push({ llc_name: llcName, vin: label.vin || "", reason: "missing_vin" });
-        continue;
-      }
+    // A row is writable only if its tracking cell is empty and nothing earlier
+    // in this same batch already claimed it (the read is a single snapshot).
+    const isFree = idx => !String(tracking[idx] || "").trim() && !claimedRows.has(idx + 1);
 
-      // Row 1 holds the column headers, so data starts at row 2.
-      const matches = [];
-      for (let i = 1; i < llc.length; i++) {
-        if (normName(llc[i]) !== normName(llcName)) continue;
-        if (last4(vin[i]) !== vinLast4) continue;
-        matches.push(i);
-      }
-
-      if (matches.length === 0) {
-        skipped.push({ llc_name: llcName, vin: label.vin, reason: "no_match" });
-        continue;
-      }
-      if (matches.length > 1) {
-        skipped.push({ llc_name: llcName, vin: label.vin, reason: "multiple_matches" });
-        continue;
-      }
-
-      const idx = matches[0];
-      const rowNumber = idx + 1;
-      // A row already targeted earlier in this same batch counts as taken —
-      // otherwise two labels could both write to it on the stale read.
-      if (String(tracking[idx] || "").trim() || claimedRows.has(rowNumber)) {
-        skipped.push({ llc_name: llcName, vin: label.vin, reason: "already_has_tracking" });
-        continue;
-      }
-
+    const queueWrite = (label, llcName, rowNumber) => {
       claimedRows.add(rowNumber);
       writes.push({
         range: `${quoteTitle(sheetTitle)}!${COL_TRACKING}${rowNumber}`,
@@ -85,6 +59,68 @@ module.exports = async function handler(req, res) {
         vin: label.vin,
         tracking_number: label.tracking_number,
         row: rowNumber,
+      });
+    };
+
+    for (const label of labels) {
+      const llcName = String(label.llc_name || "").trim();
+
+      // ── Targeted write: the operator already picked the row. ──
+      if (label.row !== undefined && label.row !== null && label.row !== "") {
+        const rowNumber = Number(label.row);
+        const idx = rowNumber - 1;
+        // Row 1 is headers; refuse anything outside the rows actually read so a
+        // bad row number can't write into empty space far below the data.
+        if (!Number.isInteger(rowNumber) || rowNumber < 2 || idx >= llc.length) {
+          skipped.push({ llc_name: llcName, vin: label.vin, reason: "no_match" });
+          continue;
+        }
+        if (!isFree(idx)) {
+          skipped.push({ llc_name: llcName, vin: label.vin, row: rowNumber, reason: "already_has_tracking" });
+          continue;
+        }
+        queueWrite(label, llcName, rowNumber);
+        continue;
+      }
+
+      // ── Matched write. ──
+      const vinLast4 = last4(label.vin);
+      if (!vinLast4) {
+        skipped.push({ llc_name: llcName, vin: label.vin || "", reason: "missing_vin" });
+        continue;
+      }
+
+      // Row 1 holds the column headers, so data starts at row 2.
+      const candidates = [];
+      for (let i = 1; i < llc.length; i++) {
+        if (normName(llc[i]) !== normName(llcName)) continue;
+        if (last4(vin[i]) !== vinLast4) continue;
+        candidates.push(i);
+      }
+
+      if (candidates.length === 0) {
+        skipped.push({ llc_name: llcName, vin: label.vin, reason: "no_match" });
+        continue;
+      }
+
+      // An already-tracked row is not a real contender — this is what lets an
+      // LLC with a title row and a registration row resolve on its own.
+      const free = candidates.filter(isFree);
+
+      if (free.length === 1) {
+        queueWrite(label, llcName, free[0] + 1);
+        continue;
+      }
+      if (free.length === 0) {
+        skipped.push({ llc_name: llcName, vin: label.vin, reason: "all_candidates_have_tracking" });
+        continue;
+      }
+      skipped.push({
+        llc_name: llcName,
+        vin: label.vin,
+        tracking_number: label.tracking_number,
+        reason: "needs_choice",
+        candidates: free.map(i => describeRow(cols, i)),
       });
     }
 
@@ -128,14 +164,26 @@ async function getFirstSheetTitle(token) {
   return title;
 }
 
+// Reads A–G so `needs_choice` can describe each candidate row well enough for
+// the operator to tell two rows of the same vehicle apart.
 async function readColumns(token, sheetTitle) {
-  const t = quoteTitle(sheetTitle);
-  const ranges = [`${t}!${COL_LLC}:${COL_LLC}`, `${t}!${COL_VIN}:${COL_VIN}`, `${t}!${COL_TRACKING}:${COL_TRACKING}`];
-  const qs = ranges.map(r => `ranges=${encodeURIComponent(r)}`).join("&");
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${qs}&majorDimension=COLUMNS`;
+  const range = `${quoteTitle(sheetTitle)}!${COL_LLC}:${COL_TRACKING}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?majorDimension=COLUMNS`;
   const json = await sheetsGet(token, url);
-  const col = i => (json.valueRanges?.[i]?.values?.[0]) || [];
-  return { llc: col(0), vin: col(1), tracking: col(2) };
+  const col = i => (json.values?.[i]) || [];
+  return {
+    llc: col(0), vin: col(1), type: col(2), date: col(3),
+    amount: col(4), where: col(5), tracking: col(6),
+  };
+}
+
+function describeRow(cols, idx) {
+  return {
+    row: idx + 1,
+    type: String(cols.type[idx] || ""),
+    date_registered: String(cols.date[idx] || ""),
+    where: String(cols.where[idx] || ""),
+  };
 }
 
 async function sheetsGet(token, url) {

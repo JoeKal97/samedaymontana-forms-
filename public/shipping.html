@@ -88,6 +88,14 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
 .sheet-block.ok{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
 .sheet-block.warn{background:var(--amber-bg);border:1px solid var(--gold);color:#7A5A12}
 .sheet-block.preview{background:var(--amber-bg);border:1px dashed var(--gold);color:#7A5A12}
+/* Deliberately not gold — gold is the button that spends money. */
+.btn-outline{font-size:12px;font-weight:600;padding:8px 15px;background:transparent;color:var(--navy);border:1.5px solid var(--navy);border-radius:5px;cursor:pointer}
+.btn-outline:hover:not(:disabled){background:var(--navy);color:#fff}
+.btn-outline:disabled{opacity:.45;cursor:not-allowed;border-color:var(--border);color:var(--muted)}
+.sheet-write-hint{font-size:11px;color:var(--muted);margin-top:5px}
+.cand{display:block;width:100%;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--surface);border:1px solid var(--gold);color:var(--text);border-radius:4px;padding:6px 9px;margin-top:5px;cursor:pointer}
+.cand:hover:not(:disabled){background:var(--navy);color:#fff;border-color:var(--navy)}
+.cand:disabled{opacity:.5;cursor:default}
 .sheet-block.err{background:var(--red-bg);border:1px solid var(--red);color:var(--red)}
 .sheet-block .sb-title{font-weight:600;margin-bottom:5px}
 .sheet-block .sb-item{font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.7}
@@ -125,6 +133,8 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
     <input type="checkbox" id="sheet-dry-run" checked style="accent-color:var(--navy);cursor:pointer">
     Dry run — show which rows would be written without changing the sheet
   </label>
+  <button id="sheet-write-btn" class="btn-outline" onclick="writeRetainedToSheet()">↻ Write tracking numbers to sheet</button>
+  <div class="sheet-write-hint" id="sheet-write-hint"></div>
 
   <div class="mode-tabs">
     <button class="mode-tab active" onclick="switchMode('queue')">Add One at a Time</button>
@@ -375,7 +385,9 @@ async function submitLabels(shipments) {
     });
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || 'Label creation failed');
+    lastLabels = json.labels || [];
     renderResults(json.labels);
+    renderSheetWriteBtn();
     await writeTrackingToSheet(json.labels);
     return true;
   } catch(e) {
@@ -419,6 +431,40 @@ function renderSheetRow() {
   }
 }
 
+// Last successful batch, kept so the sheet can be written (or re-previewed)
+// without going back to Shippo and paying for labels again.
+let lastLabels = [];
+
+function eligibleLabels() {
+  return (lastLabels || []).filter(l => l.status === 'success' && l.vin && l.tracking_number);
+}
+
+function renderSheetWriteBtn() {
+  const btn  = document.getElementById('sheet-write-btn');
+  const hint = document.getElementById('sheet-write-hint');
+  const n = eligibleLabels().length;
+  if (!lastLabels.length) {
+    btn.disabled = true;
+    hint.textContent = 'Create labels first — this writes the results of the last batch, it does not buy anything.';
+    return;
+  }
+  btn.disabled = n === 0;
+  hint.textContent = n
+    ? `${n} label(s) from the last batch ready to write. Never re-purchases.`
+    : 'Last batch had no labels with a VIN to write.';
+}
+
+// Re-sends the retained results. Never touches /api/shippo-label.
+function writeRetainedToSheet() {
+  if (!driveToken) {
+    setStatus('Connect Google first to write tracking numbers to the sheet.', 'err');
+    return;
+  }
+  return postSheetWrite(eligibleLabels().map(l => ({
+    llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number,
+  })));
+}
+
 // Posts successful labels that carry a VIN. Silent no-op when not connected.
 async function writeTrackingToSheet(labels) {
   const box = document.getElementById('sheet-results');
@@ -426,22 +472,47 @@ async function writeTrackingToSheet(labels) {
   if (!driveToken) return;
   const eligible = (labels || []).filter(l => l.status === 'success' && l.vin && l.tracking_number);
   if (!eligible.length) return;
+  return postSheetWrite(eligible.map(l => ({
+    llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number,
+  })));
+}
 
+async function postSheetWrite(payloadLabels) {
+  const box = document.getElementById('sheet-results');
+  if (!payloadLabels.length) return;
   try {
     const resp = await fetch(`${API_BASE}/api/sheet-write-tracking`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + driveToken },
       body: JSON.stringify({
-        labels: eligible.map(l => ({ llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number })),
+        labels: payloadLabels,
         dry_run: document.getElementById('sheet-dry-run').checked,
       }),
     });
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || 'Sheet write failed');
     renderSheetResults(json);
+    return json;
   } catch (e) {
     box.innerHTML = `<div class="sheet-block err"><div class="sb-title">Sheet write failed</div><div class="sb-item">${e.message}</div></div>`;
   }
+}
+
+// ── needs_choice picker ──
+// Candidate rows are stashed by index so the click handler carries no data.
+let pendingChoices = [];
+
+async function chooseRow(i, row) {
+  const c = pendingChoices[i];
+  if (!c) return;
+  const holder = document.getElementById('choice-' + i);
+  if (holder) holder.innerHTML = `<div class="sb-item">Writing to row ${row}...</div>`;
+  const json = await postSheetWrite([{
+    llc_name: c.llc_name, vin: c.vin, tracking_number: c.tracking_number, row: Number(row),
+  }]);
+  // postSheetWrite re-renders the whole block from the fresh response, so a
+  // resolved choice simply disappears from the list.
+  return json;
 }
 
 const SKIP_REASONS = {
@@ -449,6 +520,8 @@ const SKIP_REASONS = {
   multiple_matches:    'more than one row matched — not guessing',
   already_has_tracking:'row already has a tracking number',
   missing_vin:         'no VIN on the label',
+  needs_choice:        'more than one open row — pick which one',
+  all_candidates_have_tracking: 'every matching row already has a tracking number',
 };
 
 function renderSheetResults(json) {
@@ -463,14 +536,24 @@ function renderSheetResults(json) {
       (planned.length
         ? planned.map(p => `<div class="sb-item">${p.llc_name} → row ${p.row}, column G — ${p.tracking_number}</div>`).join('')
         : `<div class="sb-item">No rows matched — nothing would be written.</div>`) +
-      `<div class="sb-item" style="margin-top:5px">Uncheck “Dry run” and create the labels again to write for real.</div></div>`;
+      `<div class="sb-item" style="margin-top:5px">Uncheck “Dry run” and click “Write tracking numbers to sheet”.</div></div>`;
   } else if (written.length) {
     html += `<div class="sheet-block ok"><div class="sb-title">✓ ${written.length} tracking number(s) written to the sheet</div>` +
       written.map(w => `<div class="sb-item">${w.llc_name} — ${w.tracking_number} → row ${w.row}</div>`).join('') + `</div>`;
   }
   if (skipped.length) {
+    pendingChoices = [];
     html += `<div class="sheet-block warn"><div class="sb-title">⚠ ${skipped.length} not written — handle by hand</div>` +
-      skipped.map(s => `<div class="sb-item">${s.llc_name||'Unknown'}${s.vin ? ' ('+s.vin+')' : ''} — ${SKIP_REASONS[s.reason] || s.reason}</div>`).join('') + `</div>`;
+      skipped.map(s => {
+        let line = `<div class="sb-item">${s.llc_name||'Unknown'}${s.vin ? ' ('+s.vin+')' : ''} — ${SKIP_REASONS[s.reason] || s.reason}</div>`;
+        if (s.reason === 'needs_choice' && (s.candidates||[]).length) {
+          const i = pendingChoices.push(s) - 1;
+          line += `<div id="choice-${i}">` + s.candidates.map(c =>
+            `<button class="cand" onclick="chooseRow(${i}, ${c.row})">row ${c.row} — ${c.type || '(no type)'} · ${c.date_registered || '(no date)'} · ${c.where || '(no location)'}</button>`
+          ).join('') + `</div>`;
+        }
+        return line;
+      }).join('') + `</div>`;
   }
   box.innerHTML = html;
 }
@@ -501,6 +584,7 @@ function renderResults(labels) {
 
 renderQueue();
 renderSheetRow();
+renderSheetWriteBtn();
 </script>
 </body>
 </html>
