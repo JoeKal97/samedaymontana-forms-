@@ -350,7 +350,7 @@ function driveConnect() {
     client_id: clientId,
     redirect_uri: window.location.origin + '/api/drive-auth',
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets',
     prompt: 'select_account',
   });
   window.open('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString(), 'driveAuth', 'width=480,height=640');
@@ -361,6 +361,8 @@ window.addEventListener('message', e => {
   const d = e.data || {};
   if (d.type === 'DRIVE_AUTH_SUCCESS') {
     driveToken = d.access_token;
+    // Share with /shipping (same tab) so Sheets write-back can reuse the grant.
+    try { sessionStorage.setItem('sdm_drive_token', d.access_token); } catch(_) {}
     document.getElementById('drive-connect-row').style.display = 'none';
     document.getElementById('drive-browser').style.display = 'block';
     // Open directly to 5 Star / Received where client title scans land,

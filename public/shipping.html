@@ -81,6 +81,15 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
 .result{padding:10px 12px;border-radius:6px;font-size:12px;border:1px solid var(--border)}
 .result.ok{background:var(--green-bg);border-color:#b3d9c4}
 .result.err{background:var(--red-bg);border-color:#f0b8b8;color:var(--red)}
+.sheet-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:16px}
+.btn-mini{font-size:11px;font-weight:600;padding:5px 12px;background:var(--navy);color:#fff;border:none;border-radius:4px;cursor:pointer}
+.btn-mini:hover{background:var(--navy2)}
+.sheet-block{border-radius:6px;padding:11px 13px;margin-top:12px;font-size:12px}
+.sheet-block.ok{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
+.sheet-block.warn{background:var(--amber-bg);border:1px solid var(--gold);color:#7A5A12}
+.sheet-block.err{background:var(--red-bg);border:1px solid var(--red);color:var(--red)}
+.sheet-block .sb-title{font-weight:600;margin-bottom:5px}
+.sheet-block .sb-item{font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.7}
 .result-name{font-weight:600;margin-bottom:4px}
 .result-track{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)}
 .result-dl{display:inline-block;margin-top:6px;padding:4px 10px;background:var(--navy);color:#fff;border-radius:3px;font-size:11px;font-weight:500;text-decoration:none}
@@ -105,6 +114,11 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
 <div class="wrap">
   <div class="page-title">USPS Shipping Labels</div>
   <div class="page-sub">Create USPS Ground Advantage labels via Shippo. Ships from 5Star Registration, Missoula MT.</div>
+
+  <div class="sheet-row" id="sheet-row">
+    <span id="sheet-row-text">Connect Google to write tracking numbers back to the registrations sheet.</span>
+    <button class="btn-mini" id="sheet-connect" onclick="sheetsConnect()">Connect Google</button>
+  </div>
 
   <div class="mode-tabs">
     <button class="mode-tab active" onclick="switchMode('queue')">Add One at a Time</button>
@@ -142,10 +156,15 @@ header{background:var(--navy);height:58px;display:flex;align-items:center;paddin
 
   <div class="status-bar" id="status-bar"></div>
   <div class="results" id="results"></div>
+  <div id="sheet-results"></div>
 </div>
 
 <script>
 const API_BASE = window.location.origin;
+const clientId = '764792119784-emrftn7pb3v53nafrjem9i3gfcv0afjc.apps.googleusercontent.com';
+// Shared with the form filler via sessionStorage so connecting on either page
+// covers both for the life of the tab.
+let driveToken = (() => { try { return sessionStorage.getItem('sdm_drive_token') || null; } catch(_) { return null; } })();
 let queue = [];
 
 function setStatus(msg, type='loading') {
@@ -351,12 +370,94 @@ async function submitLabels(shipments) {
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || 'Label creation failed');
     renderResults(json.labels);
+    await writeTrackingToSheet(json.labels);
     return true;
   } catch(e) {
     setStatus('Shippo error: ' + e.message, 'err');
     return false;
   }
 }
+// ── Google Sheets write-back ──
+function sheetsConnect() {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: window.location.origin + '/api/drive-auth',
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets',
+    prompt: 'select_account',
+  });
+  window.open('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString(), 'driveAuth', 'width=480,height=640');
+}
+
+window.addEventListener('message', e => {
+  if (e.origin !== window.location.origin) return;
+  const d = e.data || {};
+  if (d.type === 'DRIVE_AUTH_SUCCESS') {
+    driveToken = d.access_token;
+    try { sessionStorage.setItem('sdm_drive_token', d.access_token); } catch(_) {}
+    renderSheetRow();
+  } else if (d.type === 'DRIVE_AUTH_ERROR') {
+    setStatus('Google auth error: ' + d.error, 'err');
+  }
+});
+
+function renderSheetRow() {
+  const text = document.getElementById('sheet-row-text');
+  const btn  = document.getElementById('sheet-connect');
+  if (driveToken) {
+    text.textContent = '✓ Google connected — tracking numbers will be written to the registrations sheet.';
+    btn.style.display = 'none';
+  } else {
+    text.textContent = 'Connect Google to write tracking numbers back to the registrations sheet.';
+    btn.style.display = '';
+  }
+}
+
+// Posts successful labels that carry a VIN. Silent no-op when not connected.
+async function writeTrackingToSheet(labels) {
+  const box = document.getElementById('sheet-results');
+  box.innerHTML = '';
+  if (!driveToken) return;
+  const eligible = (labels || []).filter(l => l.status === 'success' && l.vin && l.tracking_number);
+  if (!eligible.length) return;
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/sheet-write-tracking`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + driveToken },
+      body: JSON.stringify({ labels: eligible.map(l => ({ llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number })) }),
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Sheet write failed');
+    renderSheetResults(json);
+  } catch (e) {
+    box.innerHTML = `<div class="sheet-block err"><div class="sb-title">Sheet write failed</div><div class="sb-item">${e.message}</div></div>`;
+  }
+}
+
+const SKIP_REASONS = {
+  no_match:            'no matching row (LLC + VIN last 4)',
+  multiple_matches:    'more than one row matched — not guessing',
+  already_has_tracking:'row already has a tracking number',
+  missing_vin:         'no VIN on the label',
+};
+
+function renderSheetResults(json) {
+  const box = document.getElementById('sheet-results');
+  const written = json.written || [];
+  const skipped = json.skipped || [];
+  let html = '';
+  if (written.length) {
+    html += `<div class="sheet-block ok"><div class="sb-title">✓ ${written.length} tracking number(s) written to the sheet</div>` +
+      written.map(w => `<div class="sb-item">${w.llc_name} — ${w.tracking_number} → row ${w.row}</div>`).join('') + `</div>`;
+  }
+  if (skipped.length) {
+    html += `<div class="sheet-block warn"><div class="sb-title">⚠ ${skipped.length} not written — handle by hand</div>` +
+      skipped.map(s => `<div class="sb-item">${s.llc_name||'Unknown'}${s.vin ? ' ('+s.vin+')' : ''} — ${SKIP_REASONS[s.reason] || s.reason}</div>`).join('') + `</div>`;
+  }
+  box.innerHTML = html;
+}
+
 function copyTracking(btn, num) {
   navigator.clipboard.writeText(num).then(() => {
     const t = btn.textContent;
@@ -382,6 +483,7 @@ function renderResults(labels) {
 }
 
 renderQueue();
+renderSheetRow();
 </script>
 </body>
 </html>
