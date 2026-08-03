@@ -220,7 +220,7 @@ function matchStateZip(line) {
 // Parse one LLC's address. rawAddress may be multi-line (block paste) OR a
 // single inline line (spreadsheet paste). c/o may be on its own line or inline.
 function parseShippoAddress(llcName, rawAddress){
-  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',street2:'',city:'',state:'',zip:''};
+  if (!rawAddress) return {llc_name:llcName,co_name:'',street1:'',street2:'',city:'',state:'',zip:'',vin:''};
   let lines = rawAddress.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
   let co_name='';
   const coLine = lines.findIndex(l=>/^c\/o\s+/i.test(l));
@@ -229,11 +229,11 @@ function parseShippoAddress(llcName, rawAddress){
   let street1='',street2='',city='',state='',zip='';
   let ci=-1, before='';
   for (let i=lines.length-1;i>=0;i--){ const r=matchStateZip(lines[i]); if (r){ before=r.before; state=r.state; zip=r.zip; ci=i; break; } }
-  if (ci < 0){ street1=lines[0]||''; street2=lines[1]||''; return {llc_name:llcName,co_name,street1,street2,city,state,zip}; }
+  if (ci < 0){ street1=lines[0]||''; street2=lines[1]||''; return {llc_name:llcName,co_name,street1,street2,city,state,zip,vin:''}; }
   const streetLines = lines.slice(0, ci);
   if (streetLines.length === 0){ const sc = splitStreetCity(before); street1=sc.street1; city=sc.city; }
   else { street1=streetLines[0]||''; street2=streetLines[1]||''; city=before; }
-  return {llc_name:llcName,co_name,street1,street2,city,state,zip};
+  return {llc_name:llcName,co_name,street1,street2,city,state,zip,vin:''};
 }
 // Returns an array of parsed shipments; a `.skipped` count is attached for rows
 // that had no shipping address (empty or "Billing" placeholder).
@@ -246,7 +246,7 @@ function parseBatchAddresses(text){
     //  - Simple 2-col: LLC<TAB>address inline.
     rows = text.split('\n').filter(l=>l.trim()).map(line=>{
       const cols = line.split('\t');
-      if (cols.length > 2) return { llc:(cols[0]||'').trim(), addr:(cols[10]||'').trim() };
+      if (cols.length > 2) return { llc:(cols[0]||'').trim(), vin:(cols[1]||'').trim(), addr:(cols[10]||'').trim() };
       return { llc:(cols[0]||'').trim(), addr:cols.slice(1).join(' ').trim() };
     });
   } else {
@@ -263,6 +263,7 @@ function parseBatchAddresses(text){
     const addr = (r.addr||'').trim();
     if (!addr || /^billing$/i.test(addr)){ skipped++; return; }   // no shipping address
     const parsed = parseShippoAddress(r.llc, addr);
+    parsed.vin = r.vin || '';
     if (!parsed.street1 && !parsed.zip){ skipped++; return; }      // nothing usable
     shipments.push(parsed);
   });
@@ -370,7 +371,7 @@ function renderResults(labels) {
     div.className = 'result ' + (label.status==='success' ? 'ok' : 'err');
     if (label.status === 'success') {
       const co = label.co_name ? ` <span style="font-weight:400;color:var(--muted)">c/o ${label.co_name}</span>` : '';
-      div.innerHTML = `<div class="result-name">${label.llc_name}${co}</div><div class="result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="result-track">Tracking: ${label.tracking_number} <button onclick="copyTracking(this,'${label.tracking_number}')" style="font-size:10px;padding:2px 7px;margin-left:6px;background:#0C1F3D;color:#fff;border:none;border-radius:3px;cursor:pointer">⧉ Copy</button></div><a class="result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
+      div.innerHTML = `<div class="result-name">${label.llc_name}${co}</div>${label.vin ? `<div class="result-track">VIN: ${label.vin}</div>` : ''}<div class="result-track">${label.carrier} ${label.service} — $${parseFloat(label.rate).toFixed(2)}</div><div class="result-track">Tracking: ${label.tracking_number} <button onclick="copyTracking(this,'${label.tracking_number}')" style="font-size:10px;padding:2px 7px;margin-left:6px;background:#0C1F3D;color:#fff;border:none;border-radius:3px;cursor:pointer">⧉ Copy</button></div><a class="result-dl" href="${label.label_url}" target="_blank">⬇ Download Label PDF</a>`;
     } else {
       div.innerHTML = `<div class="result-name">${label.llc_name||'Unknown'}</div><div>${label.error}</div>`;
     }
