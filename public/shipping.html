@@ -388,7 +388,9 @@ async function submitLabels(shipments) {
     lastLabels = json.labels || [];
     renderResults(json.labels);
     renderSheetWriteBtn();
-    await writeTrackingToSheet(json.labels);
+    // The sheet is never touched automatically — clear any results from the
+    // previous batch so they can't be mistaken for this one's.
+    document.getElementById('sheet-results').innerHTML = '';
     return true;
   } catch(e) {
     setStatus('Shippo error: ' + e.message, 'err');
@@ -461,18 +463,6 @@ function writeRetainedToSheet() {
     return;
   }
   return postSheetWrite(eligibleLabels().map(l => ({
-    llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number,
-  })));
-}
-
-// Posts successful labels that carry a VIN. Silent no-op when not connected.
-async function writeTrackingToSheet(labels) {
-  const box = document.getElementById('sheet-results');
-  box.innerHTML = '';
-  if (!driveToken) return;
-  const eligible = (labels || []).filter(l => l.status === 'success' && l.vin && l.tracking_number);
-  if (!eligible.length) return;
-  return postSheetWrite(eligible.map(l => ({
     llc_name: l.llc_name, vin: l.vin, tracking_number: l.tracking_number,
   })));
 }
